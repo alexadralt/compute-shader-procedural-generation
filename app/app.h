@@ -1,8 +1,22 @@
-﻿// app.h : Include file for standard system include files,
-// or project specific include files.
+﻿#pragma once
 
-#pragma once
+#include <SDL3/SDL.h>
 
-#include <iostream>
+class App {
+	SDL_Window* window;
 
-// TODO: Reference additional headers your program requires here.
+	void quit();
+
+public:
+	App() : window(nullptr) {};
+	~App() { quit(); };
+
+	App(const App& other) = delete;
+	App(App&& other) = delete;
+
+	App& operator=(const App& other) = delete;
+	App& operator=(App&& other) = delete;
+
+	bool init();
+	void main_loop();
+};
