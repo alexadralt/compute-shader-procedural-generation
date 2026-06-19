@@ -2,9 +2,12 @@
 
 int main()
 {
-	App app;
-	app.init();
-	app.main_loop();
+    App app;
+    if (!app.init()) {
+        return 1;
+    }
+    
+    app.main_loop();
 
-	return 0;
+    return 0;
 }

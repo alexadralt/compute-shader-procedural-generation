@@ -13,3 +13,4 @@ project ("compute-shader-procedural-generation")
 
 # Include sub-projects.
 add_subdirectory ("app")
+add_subdirectory ("renderer")
