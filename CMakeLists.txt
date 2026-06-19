@@ -11,6 +11,8 @@ endif()
 
 project ("compute-shader-procedural-generation")
 
+add_compile_definitions(VK_NO_PROTOTYPES)
+
 # Include sub-projects.
 add_subdirectory ("app")
 add_subdirectory ("renderer")

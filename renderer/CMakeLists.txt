@@ -7,7 +7,7 @@ endif()
 include_directories($ENV{VULKAN_SDK}/Include)
 include_directories(../deps/SDL/include)
 
-add_library (renderer STATIC "device.cpp" "device.h")
+add_library (renderer STATIC "device.cpp" "device.h" "queue.h" "allocator.h" "vma_impl.cpp" "allocator.cpp" "surface.h" "surface.cpp")
 
 target_include_directories(renderer PUBLIC $ENV{VULKAN_SDK}/Include)
 

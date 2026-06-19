@@ -93,13 +93,14 @@ std::pair<rdr::Device, bool> rdr::Device::create()
         phys_device_index++;
     }
     std::println("selected physical device #{}", selected_phys_device_index);
+    device.m_vk_phys_device = phys_devices[selected_phys_device_index];
     
     std::println("enumerating queue families...");
     Uint32 queue_family_count = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(phys_devices[selected_phys_device_index], &queue_family_count, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(device.m_vk_phys_device, &queue_family_count, nullptr);
     
     std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(phys_devices[selected_phys_device_index], &queue_family_count, queue_families.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(device.m_vk_phys_device, &queue_family_count, queue_families.data());
     
     Sint32 selected_queue_family_index = -1;
     for (Sint32 i = 0; i < queue_families.size(); i++) {
@@ -114,7 +115,7 @@ std::pair<rdr::Device, bool> rdr::Device::create()
         return { Device(), false };
     }
 
-    if (!SDL_Vulkan_GetPresentationSupport(device.m_vk_instance, phys_devices[selected_phys_device_index], selected_phys_device_index)) {
+    if (!SDL_Vulkan_GetPresentationSupport(device.m_vk_instance, device.m_vk_phys_device, selected_phys_device_index)) {
         std::println("queue family does not support presentation");
         return { Device(), false };
     }
@@ -160,7 +161,7 @@ std::pair<rdr::Device, bool> rdr::Device::create()
         .ppEnabledExtensionNames = device_extensions.data(),
         .pEnabledFeatures = &enabled_vk_10_features
     };
-    if (vkCreateDevice(phys_devices[selected_phys_device_index], &device_CI, nullptr, &device.m_vk_device) != VK_SUCCESS) {
+    if (vkCreateDevice(device.m_vk_phys_device, &device_CI, nullptr, &device.m_vk_device) != VK_SUCCESS) {
         std::println("failed to create logical device");
         return { Device(), false };
     }

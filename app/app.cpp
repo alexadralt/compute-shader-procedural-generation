@@ -19,18 +19,24 @@ bool App::init()
         return false;
     }
 
-    std::println("creating window...");
-    m_window = SDL_CreateWindow("I have a dream!", 1920, 1080, SDL_WINDOW_RESIZABLE);
-    if (!m_window) {
-        std::println("Failed to create window: {}", SDL_GetError());
+    auto device_create_result = rdr::Device::create();
+    if (!device_create_result.second) {
         return false;
     }
+    m_rdr_device = std::move(device_create_result.first);
 
-    auto [device, ok] = rdr::Device::create();
-    if (!ok) {
+    auto allocator_create_result = rdr::Allocator::create(m_rdr_device);
+    if (!allocator_create_result.second) {
         return false;
     }
-    m_rdr_device = std::move(device);
+    m_rdr_allocator = std::move(allocator_create_result.first);
+
+    auto surface_create_result = rdr::Surface::create_window_and_surface(m_rdr_device, "Memes... the DNA of the soul", 1920, 1080);
+    if (!surface_create_result.second) {
+        return false;
+    }
+    m_rdr_surface = std::move(surface_create_result.first);
+    m_window = m_rdr_surface.window();
 
     return true;
 }
