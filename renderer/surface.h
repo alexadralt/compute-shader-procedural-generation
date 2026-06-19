@@ -9,10 +9,9 @@
 
 namespace rdr {
     class Surface {
-        VkInstance m_vk_instance;
+        const Device* m_device;
         VkSurfaceKHR m_vk_surface;
         SDL_Window* m_window;
-        VkSurfaceCapabilitiesKHR m_surface_caps;
 
         Surface(const Surface& other) = delete;
         Surface& operator=(const Surface& other) = delete;
@@ -21,16 +20,14 @@ namespace rdr {
     public:
         static std::pair<Surface, bool> create_window_and_surface(const Device& device, const char* window_title, Sint32 window_width, Sint32 window_height);
 
-        Surface() : m_vk_instance(VK_NULL_HANDLE),
+        Surface() : m_device(nullptr),
                     m_vk_surface(VK_NULL_HANDLE),
-                    m_window(nullptr),
-                    m_surface_caps() {}
+                    m_window(nullptr) {}
         ~Surface() { destroy(); }
 
-        Surface(Surface&& other) noexcept : m_vk_instance(other.m_vk_instance),
+        Surface(Surface&& other) noexcept : m_device(other.m_device),
                                             m_vk_surface(other.m_vk_surface),
-                                            m_window(other.m_window),
-                                            m_surface_caps(other.m_surface_caps) {
+                                            m_window(other.m_window) {
             new (&other) Surface();
         }
 
@@ -41,6 +38,6 @@ namespace rdr {
         }
 
         SDL_Window* window() const { return m_window; }
-        const VkSurfaceCapabilitiesKHR& surface_caps_khr() const { return m_surface_caps; }
+        std::pair<VkSurfaceCapabilitiesKHR, bool> get_surface_caps_khr() const;
     };
 }

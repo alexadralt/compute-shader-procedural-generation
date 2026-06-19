@@ -8,7 +8,7 @@ void rdr::Surface::destroy()
 {
     if (m_vk_surface != VK_NULL_HANDLE) {
         std::println("destroying vk surface...");
-        vkDestroySurfaceKHR(m_vk_instance, m_vk_surface, nullptr);
+        vkDestroySurfaceKHR(m_device->vk_instance(), m_vk_surface, nullptr);
     }
 
     if (m_window != nullptr) {
@@ -22,7 +22,7 @@ std::pair<rdr::Surface, bool> rdr::Surface::create_window_and_surface(const Devi
     std::println("creating window and vk surface...");
 
     Surface surface;
-    surface.m_vk_instance = device.vk_instance();
+    surface.m_device = &device;
 
     surface.m_window = SDL_CreateWindow(window_title, window_width, window_height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
     if (!surface.m_window) {
@@ -30,15 +30,21 @@ std::pair<rdr::Surface, bool> rdr::Surface::create_window_and_surface(const Devi
         return { Surface(), false };
     }
 
-    if (!SDL_Vulkan_CreateSurface(surface.m_window, surface.m_vk_instance, nullptr, &surface.m_vk_surface)) {
+    if (!SDL_Vulkan_CreateSurface(surface.m_window, device.vk_instance(), nullptr, &surface.m_vk_surface)) {
         std::println("failed to create vk surface: {}", SDL_GetError());
-        return { Surface(), false};
-    }
-
-    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.vk_phys_device(), surface.m_vk_surface, &surface.m_surface_caps) != VK_SUCCESS) {
-        std::println("failed to get vk surface capabilities");
         return { Surface(), false };
     }
 
     return { std::move(surface), true };
+}
+
+std::pair<VkSurfaceCapabilitiesKHR, bool> rdr::Surface::get_surface_caps_khr() const
+{
+    VkSurfaceCapabilitiesKHR caps{};
+    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_device->vk_phys_device(), m_vk_surface, &caps) != VK_SUCCESS) {
+        std::println("failed to get vk surface capabilities");
+        return { caps, false };
+    }
+
+    return { caps, true };
 }
