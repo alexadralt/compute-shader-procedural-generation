@@ -3,14 +3,16 @@
 #include <renderer/device.h>
 #include <renderer/allocator.h>
 #include <renderer/surface.h>
+#include <renderer/swapchain.h>
 
 #include <SDL3/SDL.h>
 
 class App {
     SDL_Window* m_window;
-    rdr::Device m_rdr_device;
-    rdr::Allocator m_rdr_allocator; // note: it is important that m_rdr_allocator is declared after m_rdr_device so that desctuctors are called in correct order (I love C++)
+    rdr::Device m_rdr_device; // note: it is important that m_rdr_xxx fields are declared in reverse order than they are initialized so that desctuctors are called in correct order (I love C++)
+    rdr::Allocator m_rdr_allocator; 
     rdr::Surface m_rdr_surface;
+    rdr::Swapchain m_rdr_swapchain;
 
     void quit();
 

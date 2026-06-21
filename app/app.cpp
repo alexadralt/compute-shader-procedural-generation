@@ -38,6 +38,12 @@ bool App::init()
     m_rdr_surface = std::move(surface.value());
     m_window = m_rdr_surface.window();
 
+    auto swapchain = rdr::Swapchain::create(m_rdr_device, m_rdr_surface);
+    if (!swapchain.has_value()) {
+        return false;
+    }
+    m_rdr_swapchain = std::move(swapchain.value());
+
     return true;
 }
 

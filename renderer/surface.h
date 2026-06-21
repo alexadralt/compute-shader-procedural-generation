@@ -38,6 +38,7 @@ namespace rdr {
         }
 
         SDL_Window* window() const { return m_window; }
+        VkSurfaceKHR vk_surface() const { return m_vk_surface; }
         std::optional<VkSurfaceCapabilitiesKHR> get_surface_caps_khr() const;
     };
 }
