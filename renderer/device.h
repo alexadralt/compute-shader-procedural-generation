@@ -3,7 +3,8 @@
 #include <Volk/volk.h>
 #include <SDL3/SDL_stdinc.h>
 
-#include <utility>
+#include <optional>
+#include <vector>
 
 namespace rdr {
     class Device {
@@ -16,6 +17,8 @@ namespace rdr {
         Device& operator=(const Device& other) = delete;
 
         void destroy();
+
+        static std::vector<const char*> get_validation_layers();
     public:
         Device() : m_vk_instance(VK_NULL_HANDLE),
             m_vk_device(VK_NULL_HANDLE),
@@ -35,7 +38,7 @@ namespace rdr {
             return *this;
         }
 
-        static std::pair<Device, bool> create();
+        static std::optional<Device> create();
 
         VkInstance vk_instance() const { return m_vk_instance; }
         VkDevice vk_device() const { return m_vk_device; }

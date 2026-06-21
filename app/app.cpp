@@ -19,23 +19,23 @@ bool App::init()
         return false;
     }
 
-    auto device_create_result = rdr::Device::create();
-    if (!device_create_result.second) {
+    auto device = rdr::Device::create();
+    if (!device.has_value()) {
         return false;
     }
-    m_rdr_device = std::move(device_create_result.first);
+    m_rdr_device = std::move(device.value());
 
-    auto allocator_create_result = rdr::Allocator::create(m_rdr_device);
-    if (!allocator_create_result.second) {
+    auto allocator = rdr::Allocator::create(m_rdr_device);
+    if (!allocator.has_value()) {
         return false;
     }
-    m_rdr_allocator = std::move(allocator_create_result.first);
+    m_rdr_allocator = std::move(allocator.value());
 
-    auto surface_create_result = rdr::Surface::create_window_and_surface(m_rdr_device, "Memes... the DNA of the soul", 1920, 1080);
-    if (!surface_create_result.second) {
+    auto surface = rdr::Surface::create_window_and_surface(m_rdr_device, "Memes... the DNA of the soul", 1920, 1080);
+    if (!surface.has_value()) {
         return false;
     }
-    m_rdr_surface = std::move(surface_create_result.first);
+    m_rdr_surface = std::move(surface.value());
     m_window = m_rdr_surface.window();
 
     return true;

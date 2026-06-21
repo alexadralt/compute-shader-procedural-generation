@@ -4,6 +4,8 @@
 
 #include <print>
 #include <vector>
+#include <algorithm>
+#include <cstring>
 
 void rdr::Device::destroy()
 {
@@ -20,18 +22,63 @@ void rdr::Device::destroy()
     }
 }
 
-std::pair<rdr::Device, bool> rdr::Device::create()
+std::vector<const char*> rdr::Device::get_validation_layers()
+{
+    Uint32 available_validation_layer_count = 0;
+    if (vkEnumerateInstanceLayerProperties(&available_validation_layer_count, nullptr) != VK_SUCCESS) {
+        std::println("failed to enumerate validation layers");
+        return std::vector<const char *>();
+    }
+
+    std::vector<VkLayerProperties> available_validation_layers(available_validation_layer_count);
+    if (vkEnumerateInstanceLayerProperties(&available_validation_layer_count, available_validation_layers.data()) != VK_SUCCESS) {
+        std::println("failed to get validation layers");
+        return std::vector<const char*>();
+    }
+
+    std::vector<const char*> requested_validation_layers{
+        "VK_LAYER_KHRONOS_validation",
+    };
+
+    std::vector<const char *> validation_layers_to_enable;
+    validation_layers_to_enable.reserve(requested_validation_layers.size());
+
+    std::vector<const char*> unavailable_validation_layers;
+    unavailable_validation_layers.reserve(requested_validation_layers.size());
+
+    Sint32 validation_layer_index = 0;
+    for (const char *layer_name : requested_validation_layers) {
+        if (std::ranges::any_of(available_validation_layers, [layer_name](const VkLayerProperties& props) { return strcmp(layer_name, props.layerName) == 0; })) {
+            validation_layers_to_enable.push_back(layer_name);
+        }
+        else {
+            unavailable_validation_layers.push_back(layer_name);
+        }
+    }
+
+    if (unavailable_validation_layers.size() > 0) {
+        std::println("following validation layers are unavailable:");
+        Sint32 layer_index = 0;
+        for (const char* layer_name : unavailable_validation_layers) {
+            std::println("#{}: {}", layer_index++, layer_name);
+        }
+    }
+
+    return validation_layers_to_enable;
+}
+
+std::optional<rdr::Device> rdr::Device::create()
 {
     std::println("calling SLD_Vulkan_LoadLibrary()...");
     if (!SDL_Vulkan_LoadLibrary(nullptr)) {
         std::println("failed to call SLD_Vulkan_LoadLibrary()");
-        return { Device(), false };
+        return std::nullopt;
     }
 
     std::println("initializing volk...");
     if (volkInitialize() != VK_SUCCESS) {
         std::println("failed to initialize volk");
-        return { Device(), false };
+        return std::nullopt;
     }
 
     Device device;
@@ -45,9 +92,21 @@ std::pair<rdr::Device, bool> rdr::Device::create()
     Uint32 instance_extensions_count = 0;
     char const* const* instance_extensions = SDL_Vulkan_GetInstanceExtensions(&instance_extensions_count);
 
-    VkInstanceCreateInfo instance_CI{
+    auto validation_layers_to_enable = get_validation_layers();
+    if (validation_layers_to_enable.size() > 0) {
+        std::println("enabling following validation layers:");
+
+        Sint32 layer_index = 0;
+        for (const char* layer_name : validation_layers_to_enable) {
+            std::println("#{}: {}", layer_index++, layer_name);
+        }
+    }
+
+    VkInstanceCreateInfo instance_CI {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &app_info,
+        .enabledLayerCount = static_cast<Uint32>(validation_layers_to_enable.size()),
+        .ppEnabledLayerNames = validation_layers_to_enable.data(),
         .enabledExtensionCount = instance_extensions_count,
         .ppEnabledExtensionNames = instance_extensions,
     };
@@ -55,7 +114,7 @@ std::pair<rdr::Device, bool> rdr::Device::create()
     std::println("creating vulkan instance...");
     if (vkCreateInstance(&instance_CI, nullptr, &device.m_vk_instance) != VK_SUCCESS) {
         std::println("failed to create vulkan instance");
-        return { Device(), false};
+        return std::nullopt;
     }
 
     volkLoadInstance(device.m_vk_instance);
@@ -64,18 +123,18 @@ std::pair<rdr::Device, bool> rdr::Device::create()
     Uint32 phys_device_count = 0;
     if (vkEnumeratePhysicalDevices(device.m_vk_instance, &phys_device_count, nullptr) != VK_SUCCESS) {
         std::println("failed to get count of physical devices");
-        return { Device(), false };
+        return std::nullopt;
     }
 
     if (phys_device_count == 0) {
         std::println("found 0 physical devices");
-        return { Device(), false };
+        return std::nullopt;
     }
     
     std::vector<VkPhysicalDevice> phys_devices(phys_device_count);
     if (vkEnumeratePhysicalDevices(device.m_vk_instance, &phys_device_count, phys_devices.data()) != VK_SUCCESS) {
         std::println("failed to get list of physical devices");
-        return { Device(), false };
+        return std::nullopt;
     }
 
     std::println("found following physical devices:");
@@ -112,12 +171,12 @@ std::pair<rdr::Device, bool> rdr::Device::create()
 
     if (selected_queue_family_index < 0) {
         std::println("failed to find matching queue family");
-        return { Device(), false };
+        return std::nullopt;
     }
 
     if (!SDL_Vulkan_GetPresentationSupport(device.m_vk_instance, device.m_vk_phys_device, selected_phys_device_index)) {
         std::println("queue family does not support presentation");
-        return { Device(), false };
+        return std::nullopt;
     }
 
     std::println("selected queue familly with index {}", selected_queue_family_index);
@@ -163,10 +222,10 @@ std::pair<rdr::Device, bool> rdr::Device::create()
     };
     if (vkCreateDevice(device.m_vk_phys_device, &device_CI, nullptr, &device.m_vk_device) != VK_SUCCESS) {
         std::println("failed to create logical device");
-        return { Device(), false };
+        return std::nullopt;
     }
 
     volkLoadDevice(device.m_vk_device);
 
-    return { std::move(device), true };
+    return device;
 }

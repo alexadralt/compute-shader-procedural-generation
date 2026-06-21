@@ -10,7 +10,7 @@ void rdr::Allocator::destroy()
     }
 }
 
-std::pair<rdr::Allocator, bool> rdr::Allocator::create(const Device& device)
+std::optional<rdr::Allocator> rdr::Allocator::create(const Device& device)
 {
     std::println("creating vma allocator...");
 
@@ -54,8 +54,8 @@ std::pair<rdr::Allocator, bool> rdr::Allocator::create(const Device& device)
     };
     if (vmaCreateAllocator(&allocator_CI, &allocator.m_vma_allocator) != VK_SUCCESS) {
         std::println("failed to create vma allocator");
-        return { Allocator(), false };
+        return std::nullopt;
     }
 
-    return { std::move(allocator), true };
+    return allocator;
 }
