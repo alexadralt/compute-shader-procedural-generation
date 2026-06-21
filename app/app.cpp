@@ -44,6 +44,17 @@ bool App::init()
     }
     m_rdr_swapchain = std::move(swapchain.value());
 
+    auto surface_caps = m_rdr_surface.get_surface_caps_khr();
+    if (!surface_caps.has_value()) {
+        return false;
+    }
+    VkExtent2D surface_extent = surface_caps.value().currentExtent;
+    auto depth_attachment = rdr::Image::create_depth_attachmnent(m_rdr_device, m_rdr_allocator, surface_extent.width, surface_extent.height);
+    if (!depth_attachment.has_value()) {
+        return false;
+    }
+    m_depth_attachment = std::move(depth_attachment.value());
+
     return true;
 }
 

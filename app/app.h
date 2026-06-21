@@ -4,6 +4,7 @@
 #include <renderer/allocator.h>
 #include <renderer/surface.h>
 #include <renderer/swapchain.h>
+#include <renderer/image.h>
 
 #include <SDL3/SDL.h>
 
@@ -13,14 +14,13 @@ class App {
     rdr::Allocator m_rdr_allocator; 
     rdr::Surface m_rdr_surface;
     rdr::Swapchain m_rdr_swapchain;
+    
+    rdr::Image m_depth_attachment;
 
     void quit();
 
 public:
-    App() : m_window(nullptr),
-            m_rdr_device(),
-            m_rdr_allocator(),
-            m_rdr_surface() {};
+    App() : m_window(nullptr) {};
     ~App() { quit(); };
 
     App(const App& other) = delete;

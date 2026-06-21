@@ -4,6 +4,7 @@
 
 #include <print>
 #include <vector>
+#include <array>
 #include <algorithm>
 #include <cstring>
 
@@ -36,7 +37,7 @@ std::vector<const char*> rdr::Device::get_validation_layers()
         return std::vector<const char*>();
     }
 
-    std::vector<const char*> requested_validation_layers{
+    std::array<const char*, 1> requested_validation_layers{
         "VK_LAYER_KHRONOS_validation",
     };
 

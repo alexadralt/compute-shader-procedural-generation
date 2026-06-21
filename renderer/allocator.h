@@ -30,5 +30,7 @@ namespace rdr {
             new (this) Allocator(std::move(other));
             return *this;
         }
+
+        VmaAllocator vma_allocator() const { return m_vma_allocator; }
     };
 }
