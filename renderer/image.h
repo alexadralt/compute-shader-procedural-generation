@@ -26,6 +26,7 @@ namespace rdr {
         void destroy();
     public:
         static std::optional<Image> create_depth_attachmnent(const Device& device, const Allocator& allocator, Uint32 width, Uint32 height);
+        static std::optional<Image> create(const Allocator& allocator, Uint32 width, Uint32 height, VkFormat image_format, VkImageUsageFlags image_usage, VmaAllocationCreateFlags allocation_flags = 0);
 
         Image() : m_allocator(nullptr),
                   m_vma_allocation(VK_NULL_HANDLE),

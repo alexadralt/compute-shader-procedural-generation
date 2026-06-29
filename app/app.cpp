@@ -44,22 +44,23 @@ bool App::init()
     }
     m_rdr_swapchain = std::move(swapchain_create_result.value());
 
-    auto surface_caps = m_rdr_surface.get_surface_caps_khr();
-    if (!surface_caps.has_value()) {
-        return false;
-    }
-    VkExtent2D surface_extent = surface_caps.value().currentExtent;
-    auto depth_attachment = rdr::Image::create_depth_attachmnent(m_rdr_device, m_rdr_allocator, surface_extent.width, surface_extent.height);
-    if (!depth_attachment.has_value()) {
-        return false;
-    }
-    m_depth_attachment = std::move(depth_attachment.value());
-
     auto shader_create_result = rdr::Shader::create_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute);
     if (!shader_create_result.has_value()) {
         return false;
     }
     m_terrain_gen_shader = std::move(shader_create_result.value());
+
+    auto buffer_create_result = rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    if (!buffer_create_result.has_value()) {
+        return false;
+    }
+    m_terrain_heght_map_buffer = std::move(buffer_create_result.value());
+
+    auto image_create_result = rdr::Image::create(m_rdr_allocator, Terrain_Size, Terrain_Size, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+    if (!image_create_result.has_value()) {
+        return false;
+    }
+    m_terrain_height_map_image = std::move(image_create_result.value());
 
     return true;
 }
@@ -74,6 +75,7 @@ void App::main_loop()
             switch (event.type) {
                 case SDL_EVENT_QUIT:
                 {
+                    std::println("quitting application...");
                     running = false;
                 } break;
             }

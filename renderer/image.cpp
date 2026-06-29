@@ -13,7 +13,7 @@ void rdr::Image::destroy()
 #if LOG_RENDERER_OBJECT_NAMES
         std::println("destroying {}...", m_image_name);
 #else
-        std::println("destroying image...");
+        std::println("destroying vk image...");
 #endif
         vmaDestroyImage(m_allocator->vma_allocator(), m_vk_image, m_vma_allocation);
     }
@@ -40,17 +40,34 @@ std::optional<rdr::Image> rdr::Image::create_depth_attachmnent(const Device& dev
         }
     }
 
-    Image depth_image;
-    depth_image.m_allocator = &allocator;
+    auto image_create_result = create(allocator, width, height, selected_depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
+    if (!image_create_result.has_value()) {
+        return std::nullopt;
+    }
+    Image depth_image = std::move(image_create_result.value());
 #if LOG_RENDERER_OBJECT_NAMES
     static Uint64 depth_attachment_count = 0;
     depth_image.m_image_name = std::format("depth attachment #{}", depth_attachment_count++);
 #endif
+    
+    return depth_image;
+}
 
-    VkImageCreateInfo depth_image_CI{
+std::optional<rdr::Image> rdr::Image::create(const Allocator& allocator, Uint32 width, Uint32 height, VkFormat image_format, VkImageUsageFlags image_usage, VmaAllocationCreateFlags allocation_flags)
+{
+    std::println("creating vk image...");
+
+    Image image;
+    image.m_allocator = &allocator;
+#if LOG_RENDERER_OBJECT_NAMES
+    static Uint64 vk_image_count = 0;
+    image.m_image_name = std::format("vk image #{}", vk_image_count++);
+#endif
+
+    VkImageCreateInfo image_CI{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = selected_depth_format,
+        .format = image_format,
         .extent{
             .width = width,
             .height = height,
@@ -60,18 +77,20 @@ std::optional<rdr::Image> rdr::Image::create_depth_attachmnent(const Device& dev
         .arrayLayers = 1,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .usage = image_usage,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
 
     VmaAllocationCreateInfo alloc_CI{
-        .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+        .flags = allocation_flags,
         .usage = VMA_MEMORY_USAGE_AUTO,
     };
-    if (vmaCreateImage(allocator.vma_allocator(), &depth_image_CI, &alloc_CI, &depth_image.m_vk_image, &depth_image.m_vma_allocation, nullptr) != VK_SUCCESS) {
-        std::println("failed to create depth attachment");
+    
+    VkResult result = vmaCreateImage(allocator.vma_allocator(), &image_CI, &alloc_CI, &image.m_vk_image, &image.m_vma_allocation, nullptr);
+    if (result != VK_SUCCESS) {
+        std::println("failed to create vk image: {}", static_cast<Sint32>(result));
         return std::nullopt;
     }
 
-    return depth_image;
+    return image;
 }

@@ -1,9 +1,13 @@
 #pragma once
 
 #include "allocator.h"
+#include "device.h"
 
 #include <Volk/volk.h>
 #include <vma/vk_mem_alloc.h>
+#include <SDL3/SDL_stdinc.h>
+
+#include <optional>
 
 namespace rdr {
     class Buffer {
@@ -22,8 +26,8 @@ namespace rdr {
         ~Buffer() { destroy(); }
 
         Buffer(Buffer&& other) noexcept : m_allocator(other.m_allocator),
-                                        m_vma_allocation(other.m_vma_allocation),
-                                        m_vk_buffer(other.m_vk_buffer)
+                                          m_vma_allocation(other.m_vma_allocation),
+                                          m_vk_buffer(other.m_vk_buffer)
         {
             new (&other) Buffer();
         }
@@ -33,5 +37,9 @@ namespace rdr {
             new (this) Buffer(std::move(other));
             return *this;
         }
+
+        static std::optional<Buffer> create(const Allocator& allocator, Uint64 size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateFlags allocation_flags = 0);
+
+        VkBuffer vk_buffer() const { return m_vk_buffer; }
     };
 }
