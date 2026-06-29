@@ -29,7 +29,8 @@ namespace rdr {
         Device(Device&& other) noexcept : m_vk_instance(other.m_vk_instance),
                                           m_vk_device(other.m_vk_device),
                                           m_vk_phys_device(other.m_vk_phys_device),
-                                          m_vk_queue_family_index(other.m_vk_queue_family_index) {
+                                          m_vk_queue_family_index(other.m_vk_queue_family_index)
+        {
             new (&other) Device();
         }
         

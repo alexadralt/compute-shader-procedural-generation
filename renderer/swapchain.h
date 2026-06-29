@@ -28,7 +28,8 @@ namespace rdr {
 
         Swapchain(Swapchain&& other) noexcept : m_device(other.m_device),
                                                 m_vk_swapchain(other.m_vk_swapchain),
-                                                m_image_format(other.m_image_format) {
+                                                m_image_format(other.m_image_format)
+        {
             new (&other) Swapchain();
         }
 

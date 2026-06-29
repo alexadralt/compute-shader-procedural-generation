@@ -19,30 +19,30 @@ bool App::init()
         return false;
     }
 
-    auto device = rdr::Device::create();
-    if (!device.has_value()) {
+    auto device_create_result = rdr::Device::create();
+    if (!device_create_result.has_value()) {
         return false;
     }
-    m_rdr_device = std::move(device.value());
+    m_rdr_device = std::move(device_create_result.value());
 
-    auto allocator = rdr::Allocator::create(m_rdr_device);
-    if (!allocator.has_value()) {
+    auto allocator_create_result = rdr::Allocator::create(m_rdr_device);
+    if (!allocator_create_result.has_value()) {
         return false;
     }
-    m_rdr_allocator = std::move(allocator.value());
+    m_rdr_allocator = std::move(allocator_create_result.value());
 
-    auto surface = rdr::Surface::create_window_and_surface(m_rdr_device, "Memes... the DNA of the soul", 1920, 1080);
-    if (!surface.has_value()) {
+    auto surface_create_result = rdr::Surface::create_window_and_surface(m_rdr_device, "Memes... the DNA of the soul", 1920, 1080);
+    if (!surface_create_result.has_value()) {
         return false;
     }
-    m_rdr_surface = std::move(surface.value());
+    m_rdr_surface = std::move(surface_create_result.value());
     m_window = m_rdr_surface.window();
 
-    auto swapchain = rdr::Swapchain::create(m_rdr_device, m_rdr_surface);
-    if (!swapchain.has_value()) {
+    auto swapchain_create_result = rdr::Swapchain::create(m_rdr_device, m_rdr_surface);
+    if (!swapchain_create_result.has_value()) {
         return false;
     }
-    m_rdr_swapchain = std::move(swapchain.value());
+    m_rdr_swapchain = std::move(swapchain_create_result.value());
 
     auto surface_caps = m_rdr_surface.get_surface_caps_khr();
     if (!surface_caps.has_value()) {
@@ -54,6 +54,12 @@ bool App::init()
         return false;
     }
     m_depth_attachment = std::move(depth_attachment.value());
+
+    auto shader_create_result = rdr::Shader::create_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute);
+    if (!shader_create_result.has_value()) {
+        return false;
+    }
+    m_terrain_gen_shader = std::move(shader_create_result.value());
 
     return true;
 }

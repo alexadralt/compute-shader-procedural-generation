@@ -7,7 +7,7 @@ endif()
 include_directories($ENV{VULKAN_SDK}/Include)
 include_directories(../deps/SDL/include)
 
-add_library (renderer STATIC "device.cpp" "device.h" "queue.h" "allocator.h" "vma_impl.cpp" "allocator.cpp" "surface.h" "surface.cpp" "swapchain.h" "swapchain.cpp" "image.h" "image.cpp")
+add_library (renderer STATIC "device.cpp" "device.h" "queue.h" "allocator.h" "vma_impl.cpp" "allocator.cpp" "surface.h" "surface.cpp" "swapchain.h" "swapchain.cpp" "image.h" "image.cpp" "shader.h" "shader.cpp" "buffer.h")
 
 target_include_directories(renderer PUBLIC $ENV{VULKAN_SDK}/Include)
 
@@ -15,6 +15,7 @@ if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET renderer PROPERTY CXX_STANDARD 23)
 endif()
 
-find_package(Vulkan REQUIRED COMPONENTS volk)
+find_package(Vulkan REQUIRED COMPONENTS volk dxc)
 
 target_link_libraries(renderer PRIVATE Vulkan::volk)
+target_link_libraries(renderer PRIVATE Vulkan::dxc_lib)

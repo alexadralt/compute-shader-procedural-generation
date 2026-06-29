@@ -21,7 +21,8 @@ namespace rdr {
         Allocator() : m_vma_allocator(VK_NULL_HANDLE) {}
         ~Allocator() { destroy(); }
 
-        Allocator(Allocator&& other) noexcept : m_vma_allocator(other.m_vma_allocator) {
+        Allocator(Allocator&& other) noexcept : m_vma_allocator(other.m_vma_allocator)
+        {
             new (&other) Allocator();
         }
 

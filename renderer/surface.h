@@ -27,7 +27,8 @@ namespace rdr {
 
         Surface(Surface&& other) noexcept : m_device(other.m_device),
                                             m_vk_surface(other.m_vk_surface),
-                                            m_window(other.m_window) {
+                                            m_window(other.m_window)
+        {
             new (&other) Surface();
         }
 

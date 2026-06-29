@@ -5,6 +5,7 @@
 #include <renderer/surface.h>
 #include <renderer/swapchain.h>
 #include <renderer/image.h>
+#include <renderer/shader.h>
 
 #include <SDL3/SDL.h>
 
@@ -16,6 +17,7 @@ class App {
     rdr::Swapchain m_rdr_swapchain;
     
     rdr::Image m_depth_attachment;
+    rdr::Shader m_terrain_gen_shader;
 
     void quit();
 
