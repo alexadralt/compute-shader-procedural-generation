@@ -50,7 +50,7 @@ bool App::init()
     if (!shader_compiler_create_result.has_value()) {
         return false;
     }
-    auto& shader_compiler = shader_compiler_create_result.value();
+    rdr::Shader_Compiler& shader_compiler = shader_compiler_create_result.value();
     auto shader_create_result = shader_compiler.compile_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute);
     if (!shader_create_result.has_value()) {
         return false;

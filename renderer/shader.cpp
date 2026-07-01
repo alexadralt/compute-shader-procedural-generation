@@ -10,6 +10,7 @@ rdr::Shader::~Shader()
 #else
         std::println("destroying shader module...");
 #endif
+        
         vkDestroyShaderModule(m_device->vk_device(), m_vk_shader_module, nullptr);
     }
 }

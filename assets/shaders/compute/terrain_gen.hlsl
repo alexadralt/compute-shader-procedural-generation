@@ -10,7 +10,7 @@ struct TerrainGenerationSettings
     float amplitude;
 };
 
-[[vk::push_constants]]
+[[vk::push_constant]]
 TerrainGenerationSettings terrain_generation_settings;
 
 float noise(float2 coords)

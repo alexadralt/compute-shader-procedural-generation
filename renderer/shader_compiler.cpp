@@ -4,6 +4,7 @@
 #include <atlbase.h>
 #include <dxc/dxcapi.h>
 #include <SDL3/SDL_stdinc.h>
+#include <spirv_reflect.h>
 
 #include <print>
 #include <array>
@@ -89,22 +90,22 @@ std::optional<rdr::Shader> rdr::Shader_Compiler::compile_from_source_file(const 
 
     const wchar_t* shader_profile;
     switch (shader_type) {
-    case Shader_Type::Vertex:
-    {
-        shader_profile = L"vs_6_1";
-    } break;
-    case Shader_Type::Fragment:
-    {
-        shader_profile = L"ps_6_1";
-    } break;
-    case Shader_Type::Compute:
-    {
-        shader_profile = L"cs_6_1";
-    } break;
-    default:
-    {
-        return std::nullopt;
-    }
+        case Shader_Type::Vertex:
+        {
+            shader_profile = L"vs_6_1";
+        } break;
+        case Shader_Type::Fragment:
+        {
+            shader_profile = L"ps_6_1";
+        } break;
+        case Shader_Type::Compute:
+        {
+            shader_profile = L"cs_6_1";
+        } break;
+        default:
+        {
+            return std::nullopt;
+        }
     }
 
     std::array<const wchar_t*, 5> arguments = {
@@ -116,15 +117,21 @@ std::optional<rdr::Shader> rdr::Shader_Compiler::compile_from_source_file(const 
         L"-spirv"
     };
 
-    DxcBuffer buffer{};
-    buffer.Encoding = DXC_CP_UTF8;
-    buffer.Ptr = source_blob->GetBufferPointer();
-    buffer.Size = source_blob->GetBufferSize();
+    DxcBuffer buffer{
+        .Ptr = source_blob->GetBufferPointer(),
+        .Size = source_blob->GetBufferSize(),
+        .Encoding = DXC_CP_UTF8,
+    };
 
     CComPtr<IDxcResult> compilation_result;
     result = m_dxc_compiler->Compile(&buffer, arguments.data(), static_cast<Uint32>(arguments.size()), nullptr, IID_PPV_ARGS(&compilation_result));
     if (SUCCEEDED(result)) {
-        compilation_result->GetStatus(&result);
+        HRESULT compilation_get_status_result = compilation_result->GetStatus(&result);
+        if (FAILED(compilation_get_status_result)) {
+            std::println("Could not get compilation status: {}", compilation_get_status_result);
+            return std::nullopt;
+        }
+
         if (FAILED(result)) {
             CComPtr<IDxcBlobEncoding> error_blob;
             result = compilation_result->GetErrorBuffer(&error_blob);
@@ -155,6 +162,29 @@ std::optional<rdr::Shader> rdr::Shader_Compiler::compile_from_source_file(const 
         std::println("Could not create shader module: {}", static_cast<Sint32>(vk_result));
         return std::nullopt;
     }
+
+    SpvReflectShaderModule spv_shader_module;
+    SpvReflectResult spv_result = spvReflectCreateShaderModule(code->GetBufferSize(), code->GetBufferPointer(), &spv_shader_module);
+    if (spv_result != SPV_REFLECT_RESULT_SUCCESS) {
+        std::println("Could not create spriv_reflect shader module: {}", static_cast<Sint32>(spv_result));
+        return std::nullopt;
+    }
+
+    Uint32 push_constants_count = 0;
+    spv_result = spvReflectEnumeratePushConstants(&spv_shader_module, &push_constants_count, nullptr);
+    if (spv_result != SPV_REFLECT_RESULT_SUCCESS) {
+        std::println("Could not get shader push constants count: {}", static_cast<Sint32>(spv_result));
+        return std::nullopt;
+    }
+    
+    std::vector<SpvReflectBlockVariable*> push_constants(push_constants_count);
+    spv_result = spvReflectEnumeratePushConstants(&spv_shader_module, &push_constants_count, push_constants.data());
+    if (spv_result != SPV_REFLECT_RESULT_SUCCESS) {
+        std::println("Could not get shader push constants: {}", static_cast<Sint32>(spv_result));
+        return std::nullopt;
+    }
+
+    spvReflectDestroyShaderModule(&spv_shader_module);
 
 #if LOG_RENDERER_OBJECT_NAMES
     return Shader(device, shader_module, std::string(source_path));

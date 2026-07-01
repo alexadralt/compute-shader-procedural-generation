@@ -25,16 +25,16 @@ namespace rdr {
         Shader& operator=(const Shader& other) = delete;
     public:
         Shader() : m_device(nullptr),
-                   m_vk_shader_module(VK_NULL_HANDLE) {}
+                   m_vk_shader_module(VK_NULL_HANDLE) { }
         ~Shader();
 
         Shader(const Device& device, VkShaderModule shader_module) : m_device(&device),
-                                                                     m_vk_shader_module(shader_module) {}
+                                                                                                               m_vk_shader_module(shader_module) {}
 
 #if LOG_RENDERER_OBJECT_NAMES
         Shader(const Device& device, VkShaderModule shader_module, std::string&& name) : m_device(&device),
-                                                                                         m_vk_shader_module(shader_module),
-                                                                                         m_name(std::move(name)) {}
+                                                                                                                                   m_vk_shader_module(shader_module),
+                                                                                                                                   m_name(std::move(name)) {}
 #endif
 
         Shader(Shader&& other) noexcept : m_device(other.m_device),

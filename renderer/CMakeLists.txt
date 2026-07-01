@@ -5,9 +5,11 @@ else()
 endif()
 
 include_directories($ENV{VULKAN_SDK}/Include)
+include_directories($ENV{VULKAN_SDK})
 include_directories(../deps/SDL/include)
+include_directories(../deps/spirv_reflect)
 
-add_library (renderer STATIC "device.cpp" "device.h" "queue.h" "allocator.h" "vma_impl.cpp" "allocator.cpp" "surface.h" "surface.cpp" "swapchain.h" "swapchain.cpp" "image.h" "image.cpp" "shader.h" "shader.cpp" "buffer.h" "buffer.cpp" "shader_compiler.h" "shader_compiler.cpp")
+add_library (renderer STATIC "device.cpp" "device.h" "queue.h" "allocator.h" "vma_impl.cpp" "allocator.cpp" "surface.h" "surface.cpp" "swapchain.h" "swapchain.cpp" "image.h" "image.cpp" "shader.h" "shader.cpp" "buffer.h" "buffer.cpp" "shader_compiler.h" "shader_compiler.cpp" "../deps/spirv_reflect/spirv_reflect.h" "../deps/spirv_reflect/spirv_reflect.c" )
 
 target_include_directories(renderer PUBLIC $ENV{VULKAN_SDK}/Include)
 
