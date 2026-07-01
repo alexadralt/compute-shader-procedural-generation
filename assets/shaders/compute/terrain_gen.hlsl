@@ -3,12 +3,15 @@ RWBuffer<float> height_map : register(u0);
 [[vk::image_format("rgba8")]]
 RWTexture2D<unorm float4> height_map_image : register(u0);
 
-cbuffer TerrainGenerationSettings : register(b0)
+struct TerrainGenerationSettings
 {
     uint terrain_size;
     float frequency;
     float amplitude;
 };
+
+[[vk::push_constants]]
+TerrainGenerationSettings terrain_generation_settings;
 
 float noise(float2 coords)
 {
@@ -18,6 +21,10 @@ float noise(float2 coords)
 [numthreads(8, 8, 1)]
 void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
+    uint terrain_size = terrain_generation_settings.terrain_size;
+    float frequency = terrain_generation_settings.frequency;
+    float amplitude = terrain_generation_settings.amplitude;
+    
     float noise_value = noise(float2(dispatch_thread_id.xy) * frequency) * amplitude;
     height_map[dispatch_thread_id.x * terrain_size + dispatch_thread_id.y] = noise_value;
     

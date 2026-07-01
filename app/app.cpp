@@ -1,5 +1,7 @@
 ﻿#include "app.h"
 
+#include <renderer/shader_compiler.h>
+
 #include <print>
 
 void App::quit()
@@ -44,7 +46,12 @@ bool App::init()
     }
     m_rdr_swapchain = std::move(swapchain_create_result.value());
 
-    auto shader_create_result = rdr::Shader::create_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute);
+    auto shader_compiler_create_result = rdr::Shader_Compiler::create();
+    if (!shader_compiler_create_result.has_value()) {
+        return false;
+    }
+    auto& shader_compiler = shader_compiler_create_result.value();
+    auto shader_create_result = shader_compiler.compile_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute);
     if (!shader_create_result.has_value()) {
         return false;
     }

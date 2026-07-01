@@ -5,10 +5,7 @@
 
 #include <optional>
 #include <string>
-
-#if LOG_RENDERER_OBJECT_NAMES
 #include <utility>
-#endif
 
 namespace rdr {
     enum class Shader_Type {
@@ -26,12 +23,19 @@ namespace rdr {
 
         Shader(const Shader& other) = delete;
         Shader& operator=(const Shader& other) = delete;
-
-        void destroy();
     public:
         Shader() : m_device(nullptr),
                    m_vk_shader_module(VK_NULL_HANDLE) {}
-        ~Shader() { destroy(); }
+        ~Shader();
+
+        Shader(const Device& device, VkShaderModule shader_module) : m_device(&device),
+                                                                     m_vk_shader_module(shader_module) {}
+
+#if LOG_RENDERER_OBJECT_NAMES
+        Shader(const Device& device, VkShaderModule shader_module, std::string&& name) : m_device(&device),
+                                                                                         m_vk_shader_module(shader_module),
+                                                                                         m_name(std::move(name)) {}
+#endif
 
         Shader(Shader&& other) noexcept : m_device(other.m_device),
                                           m_vk_shader_module(other.m_vk_shader_module)
@@ -43,12 +47,10 @@ namespace rdr {
         }
 
         Shader& operator=(Shader&& other) noexcept {
-            destroy();
+            this->~Shader();
             new (this) Shader(std::move(other));
             return *this;
         }
-
-        static std::optional<Shader> create_from_source_file(const Device& device, const std::string& source_path, Shader_Type shader_type);
 
         VkShaderModule vk_shader_module() const { return m_vk_shader_module; }
     };
