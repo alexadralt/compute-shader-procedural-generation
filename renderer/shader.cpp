@@ -65,14 +65,14 @@ std::vector<SpvReflectDescriptorSet*> rdr::Shader::get_descriptor_sets() const
     Uint32 descriptor_sets_count = 0;
     SpvReflectResult spv_result = spvReflectEnumerateDescriptorSets(m_spv_shader_module, &descriptor_sets_count, nullptr);
     if (spv_result != SPV_REFLECT_RESULT_SUCCESS) {
-        std::println("Could not get shader descriptor bindings count: {}", static_cast<Sint32>(spv_result));
+        std::println("Could not get shader descriptor sets count: {}", static_cast<Sint32>(spv_result));
         return std::vector<SpvReflectDescriptorSet*>();
     }
 
     std::vector<SpvReflectDescriptorSet*> descritpor_sets(descriptor_sets_count);
     spv_result = spvReflectEnumerateDescriptorSets(m_spv_shader_module, &descriptor_sets_count, descritpor_sets.data());
     if (spv_result != SPV_REFLECT_RESULT_SUCCESS) {
-        std::println("Could not get shader descriptor bindings: {}", static_cast<Sint32>(spv_result));
+        std::println("Could not get shader descriptor sets: {}", static_cast<Sint32>(spv_result));
         return std::vector<SpvReflectDescriptorSet*>();
     }
 

@@ -20,7 +20,7 @@ namespace rdr {
         Shader_Compiler(const Shader_Compiler& other) = delete;
         Shader_Compiler& operator=(const Shader_Compiler& other) = delete;
 
-        std::wstring convert_to_utf_16(std::string_view input);
+        static std::wstring convert_to_utf_16(std::string_view input);
     public:
         Shader_Compiler() : m_dxc_library(nullptr),
                             m_dxc_compiler(nullptr),
