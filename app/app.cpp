@@ -57,6 +57,12 @@ bool App::init()
     }
     m_terrain_gen_shader = std::move(shader_create_result.value());
 
+    auto descriptor_set_create_result = rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_terrain_gen_shader, 0);
+    if (!descriptor_set_create_result.has_value()) {
+        return false;
+    }
+    m_terraing_gen_shader_descriptor_set = std::move(descriptor_set_create_result.value());
+
     auto buffer_create_result = rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     if (!buffer_create_result.has_value()) {
         return false;
@@ -68,6 +74,21 @@ bool App::init()
         return false;
     }
     m_terrain_height_map_image = std::move(image_create_result.value());
+
+    auto terrain_gen_shader_push_constants = m_terrain_gen_shader.get_push_constants();
+    auto pipeline_layout_create_result = rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_terraing_gen_shader_descriptor_set, 1), std::span(terrain_gen_shader_push_constants), VK_SHADER_STAGE_COMPUTE_BIT);
+    if (!pipeline_layout_create_result.has_value()) {
+        return false;
+    }
+    m_compute_pipeline_layouts[0] = std::move(pipeline_layout_create_result.value());
+
+    std::vector<rdr::Pipeline> compute_pipelines = rdr::Pipeline::create_compute(m_rdr_device, std::span(&m_terrain_gen_shader, 1), std::span(&m_compute_pipeline_layouts[0], Compute_Pipeline_Count));
+    if (compute_pipelines.size() < 1) {
+        return false;
+    }
+    for (size_t i = 0; i < Compute_Pipeline_Count; ++i) {
+        m_compute_pipelines[i] = std::move(compute_pipelines[i]);
+    }
 
     return true;
 }

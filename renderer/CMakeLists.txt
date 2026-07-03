@@ -9,9 +9,11 @@ include_directories($ENV{VULKAN_SDK})
 include_directories(../deps/SDL/include)
 include_directories(../deps/spirv_reflect)
 
-add_library (renderer STATIC "device.cpp" "device.h" "queue.h" "allocator.h" "vma_impl.cpp" "allocator.cpp" "surface.h" "surface.cpp" "swapchain.h" "swapchain.cpp" "image.h" "image.cpp" "shader.h" "shader.cpp" "buffer.h" "buffer.cpp" "shader_compiler.h" "shader_compiler.cpp" "../deps/spirv_reflect/spirv_reflect.h" "../deps/spirv_reflect/spirv_reflect.c" )
+add_library (renderer STATIC "device.cpp" "device.h" "queue.h" "allocator.h" "vma_impl.cpp" "allocator.cpp" "surface.h" "surface.cpp" "swapchain.h" "swapchain.cpp" "image.h" "image.cpp" "shader.h" "shader.cpp" "buffer.h" "buffer.cpp" "shader_compiler.h" "shader_compiler.cpp" "../deps/spirv_reflect/spirv_reflect.h" "../deps/spirv_reflect/spirv_reflect.c"  "descriptor_set_layout.h" "descriptor_set_layout.cpp" "pipeline_layout.h" "pipeline_layout.cpp" "pipeline.h" "pipeline.cpp")
 
 target_include_directories(renderer PUBLIC $ENV{VULKAN_SDK}/Include)
+target_include_directories(renderer PUBLIC $ENV{VULKAN_SDK})
+target_include_directories(renderer PUBLIC ../deps/spirv_reflect)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET renderer PROPERTY CXX_STANDARD 23)

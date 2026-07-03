@@ -3,16 +3,12 @@
 #include "device.h"
 
 #include <Volk/volk.h>
+#include <spirv_reflect.h>
 
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
-
-struct SpvReflectShaderModule;
-struct SpvReflectBlockVariable;
-struct SpvReflectDescriptorBinding;
-struct SpvReflectDescriptorSet;
 
 namespace rdr {
     enum class Shader_Type {
@@ -65,6 +61,7 @@ namespace rdr {
         }
 
         VkShaderModule vk_shader_module() const { return m_vk_shader_module; }
+        SpvReflectShaderModule* spv_shader_module() const { return m_spv_shader_module; }
 
         std::vector<SpvReflectBlockVariable*> get_push_constants() const;
         std::vector<SpvReflectDescriptorBinding*> get_descriptor_bindings() const;

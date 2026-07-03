@@ -24,18 +24,20 @@ std::wstring rdr::Shader_Compiler::convert_to_utf_16(std::string_view input)
 
 rdr::Shader_Compiler::~Shader_Compiler()
 {
-    std::println("destroying shader compiler...");
+    if (m_dxc_utils || m_dxc_compiler || m_dxc_library) {
+        std::println("destroying shader compiler...");
 
-    if (m_dxc_utils) {
-        m_dxc_utils->Release();
-    }
+        if (m_dxc_utils) {
+            m_dxc_utils->Release();
+        }
 
-    if (m_dxc_compiler) {
-        m_dxc_compiler->Release();
-    }
+        if (m_dxc_compiler) {
+            m_dxc_compiler->Release();
+        }
 
-    if (m_dxc_library) {
-        m_dxc_library->Release();
+        if (m_dxc_library) {
+            m_dxc_library->Release();
+        }
     }
 }
 
