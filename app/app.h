@@ -10,8 +10,13 @@
 #include <renderer/descriptor_set_layout.h>
 #include <renderer/pipeline_layout.h>
 #include <renderer/pipeline.h>
+#include <renderer/descriptor_pool.h>
+#include <renderer/descriptor_set.h>
+#include <renderer/image_view.h>
 
 #include <SDL3/SDL.h>
+
+#include <array>
 
 class App {
     SDL_Window* m_window;
@@ -23,11 +28,14 @@ class App {
     static constexpr size_t Compute_Pipeline_Count = 1;
 
     rdr::Shader m_terrain_gen_shader;
-    rdr::Descriptor_Set_Layout m_terraing_gen_shader_descriptor_set;
+    rdr::Descriptor_Set_Layout m_terraing_gen_shader_descriptor_set_layout;
     rdr::Buffer m_terrain_heght_map_buffer;
     rdr::Image m_terrain_height_map_image;
-    rdr::Pipeline_Layout m_compute_pipeline_layouts[Compute_Pipeline_Count];
-    rdr::Pipeline m_compute_pipelines[Compute_Pipeline_Count];
+    rdr::Image_View m_terraing_height_map_image_view;
+    std::array<rdr::Pipeline_Layout, Compute_Pipeline_Count> m_compute_pipeline_layouts;
+    std::array<rdr::Pipeline, Compute_Pipeline_Count> m_compute_pipelines;
+    rdr::Descriptor_Pool m_descriptor_pool;
+    rdr::Descriptor_Set m_terrain_gen_descriptor_set;
 
     void quit();
 
@@ -45,4 +53,5 @@ public:
 
     bool init();
     void main_loop();
+    void process_events(bool& running);
 };

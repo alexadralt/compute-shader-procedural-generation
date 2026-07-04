@@ -54,5 +54,7 @@ namespace rdr {
             new (this) Image(std::move(other));
             return *this;
         }
+
+        VkImage vk_image() const { return m_vk_image; }
     };
 }

@@ -57,11 +57,9 @@ bool App::init()
     }
     m_terrain_gen_shader = std::move(shader_create_result.value());
 
-    auto descriptor_set_create_result = rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_terrain_gen_shader, 0);
-    if (!descriptor_set_create_result.has_value()) {
+    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_terrain_gen_shader, 0, 0, m_terraing_gen_shader_descriptor_set_layout)) {
         return false;
     }
-    m_terraing_gen_shader_descriptor_set = std::move(descriptor_set_create_result.value());
 
     auto buffer_create_result = rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     if (!buffer_create_result.has_value()) {
@@ -75,20 +73,47 @@ bool App::init()
     }
     m_terrain_height_map_image = std::move(image_create_result.value());
 
+    if (!rdr::Image_View::create(m_rdr_device, m_terrain_height_map_image, 0, VK_FORMAT_B8G8R8A8_UNORM, m_terraing_height_map_image_view)) {
+        return false;
+    }
+
     auto terrain_gen_shader_push_constants = m_terrain_gen_shader.get_push_constants();
-    auto pipeline_layout_create_result = rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_terraing_gen_shader_descriptor_set, 1), std::span(terrain_gen_shader_push_constants), VK_SHADER_STAGE_COMPUTE_BIT);
+    auto pipeline_layout_create_result = rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_terraing_gen_shader_descriptor_set_layout, 1), terrain_gen_shader_push_constants, VK_SHADER_STAGE_COMPUTE_BIT);
     if (!pipeline_layout_create_result.has_value()) {
         return false;
     }
     m_compute_pipeline_layouts[0] = std::move(pipeline_layout_create_result.value());
 
-    std::vector<rdr::Pipeline> compute_pipelines = rdr::Pipeline::create_compute(m_rdr_device, std::span(&m_terrain_gen_shader, 1), std::span(&m_compute_pipeline_layouts[0], Compute_Pipeline_Count));
+    std::vector<rdr::Pipeline> compute_pipelines = rdr::Pipeline::create_compute(m_rdr_device, std::span(&m_terrain_gen_shader, 1), m_compute_pipeline_layouts);
     if (compute_pipelines.size() < 1) {
         return false;
     }
     for (size_t i = 0; i < Compute_Pipeline_Count; ++i) {
         m_compute_pipelines[i] = std::move(compute_pipelines[i]);
     }
+
+    if (!rdr::Descriptor_Pool::create(m_rdr_device, std::span(&m_terraing_gen_shader_descriptor_set_layout, 1), 1, m_descriptor_pool)) {
+        return false;
+    }
+
+    if (!m_descriptor_pool.allocate_descriptor_sets(1, m_terraing_gen_shader_descriptor_set_layout, std::span(&m_terrain_gen_descriptor_set, 1))) {
+        return false;
+    }
+    
+    VkDescriptorBufferInfo terrain_buffer_info{
+        .buffer = m_terrain_heght_map_buffer.vk_buffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE,
+    };
+    VkDescriptorImageInfo terrain_image_info{
+        .imageView = m_terraing_height_map_image_view.vk_image_view(),
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+    };
+    std::array<VkWriteDescriptorSet, 2> write_descriptor_set = {
+        m_terrain_gen_descriptor_set.write_storage_buffer(0, std::span(&terrain_buffer_info, 1)),
+        m_terrain_gen_descriptor_set.write_storage_image(1, std::span(&terrain_image_info, 1)),
+    };
+    rdr::Descriptor_Set::update_descriptor_sets(m_rdr_device, write_descriptor_set, std::span<VkCopyDescriptorSet>());
 
     return true;
 }
@@ -97,16 +122,19 @@ void App::main_loop()
 {
     bool running = true;
     while (running) {
-        SDL_Event event;
+        process_events(running);
+    }
+}
 
-        while (SDL_PollEvent(&event)) {
-            switch (event.type) {
-                case SDL_EVENT_QUIT:
-                {
-                    std::println("quitting application...");
-                    running = false;
-                } break;
-            }
+void App::process_events(bool& running)
+{
+    for (SDL_Event event; SDL_PollEvent(&event);) {
+        switch (event.type) {
+            case SDL_EVENT_QUIT:
+            {
+                std::println("quitting application...");
+                running = false;
+            } break;
         }
     }
 }

@@ -9,7 +9,7 @@ include_directories($ENV{VULKAN_SDK})
 include_directories(../deps/SDL/include)
 include_directories(../deps/spirv_reflect)
 
-add_library (renderer STATIC "device.cpp" "device.h" "queue.h" "allocator.h" "vma_impl.cpp" "allocator.cpp" "surface.h" "surface.cpp" "swapchain.h" "swapchain.cpp" "image.h" "image.cpp" "shader.h" "shader.cpp" "buffer.h" "buffer.cpp" "shader_compiler.h" "shader_compiler.cpp" "../deps/spirv_reflect/spirv_reflect.h" "../deps/spirv_reflect/spirv_reflect.c"  "descriptor_set_layout.h" "descriptor_set_layout.cpp" "pipeline_layout.h" "pipeline_layout.cpp" "pipeline.h" "pipeline.cpp")
+add_library (renderer STATIC "device.cpp" "device.h" "queue.h" "allocator.h" "vma_impl.cpp" "allocator.cpp" "surface.h" "surface.cpp" "swapchain.h" "swapchain.cpp" "image.h" "image.cpp" "shader.h" "shader.cpp" "buffer.h" "buffer.cpp" "shader_compiler.h" "shader_compiler.cpp" "../deps/spirv_reflect/spirv_reflect.h" "../deps/spirv_reflect/spirv_reflect.c"  "descriptor_set_layout.h" "descriptor_set_layout.cpp" "pipeline_layout.h" "pipeline_layout.cpp" "pipeline.h" "pipeline.cpp" "descriptor_pool.h" "descriptor_pool.cpp" "descriptor_set.h"   "image_view.h" "image_view.cpp")
 
 target_include_directories(renderer PUBLIC $ENV{VULKAN_SDK}/Include)
 target_include_directories(renderer PUBLIC $ENV{VULKAN_SDK})

@@ -3,6 +3,7 @@
 #include <spirv_reflect.h>
 
 #include <print>
+#include <vector>
 
 #if LOG_RENDERER_OBJECT_NAMES
 #include <format>
@@ -20,7 +21,7 @@ rdr::Descriptor_Set_Layout::~Descriptor_Set_Layout()
     }
 }
 
-std::optional<rdr::Descriptor_Set_Layout> rdr::Descriptor_Set_Layout::create_from_shader(const Device& device, const Shader& shader, Uint32 set_number)
+bool rdr::Descriptor_Set_Layout::create_from_shader(const Device& device, const Shader& shader, Uint32 set_number, VkDescriptorSetLayoutCreateFlags flags, Descriptor_Set_Layout& out_descriptor_set_layout)
 {
     std::println("creating descriptor set layout from shader...");
 
@@ -28,50 +29,47 @@ std::optional<rdr::Descriptor_Set_Layout> rdr::Descriptor_Set_Layout::create_fro
     const SpvReflectDescriptorSet* shader_descriptor_set = spvReflectGetDescriptorSet(shader.spv_shader_module(), set_number, &spv_result);
     if (spv_result != SPV_REFLECT_RESULT_SUCCESS) {
         std::println("Could not get descriptor set from shader: {}", static_cast<Sint32>(spv_result));
-        return std::nullopt;
+        return false;
     }
 
-    std::vector<VkDescriptorSetLayoutBinding> vk_descriptor_layout_bindings;
-    vk_descriptor_layout_bindings.reserve(shader_descriptor_set->binding_count);
-
+    std::vector<VkDescriptorSetLayoutBinding> vk_descriptor_layout_bindings(shader_descriptor_set->binding_count);
     for (Uint32 i = 0; i < shader_descriptor_set->binding_count; ++i) {
         SpvReflectDescriptorBinding* shader_descriptor_binding = shader_descriptor_set->bindings[i];
 
-        VkDescriptorSetLayoutBinding vk_descriptor_layout_binding{
-            .binding = shader_descriptor_binding->binding,
-            .descriptorType = static_cast<VkDescriptorType>(shader_descriptor_binding->descriptor_type),
-            .descriptorCount = shader_descriptor_binding->count,
-            .stageFlags = static_cast<VkShaderStageFlags>(shader.spv_shader_module()->shader_stage),
-        };
-        vk_descriptor_layout_bindings.push_back(vk_descriptor_layout_binding);
+        vk_descriptor_layout_bindings[i].binding = shader_descriptor_binding->binding;
+        vk_descriptor_layout_bindings[i].descriptorType = static_cast<VkDescriptorType>(shader_descriptor_binding->descriptor_type);
+        vk_descriptor_layout_bindings[i].descriptorCount = shader_descriptor_binding->count;
+        vk_descriptor_layout_bindings[i].stageFlags = static_cast<VkShaderStageFlags>(shader.spv_shader_module()->shader_stage);
     }
+
+    return create(device, std::move(vk_descriptor_layout_bindings), flags, out_descriptor_set_layout);
+}
+
+bool rdr::Descriptor_Set_Layout::create(const Device& device, std::vector<VkDescriptorSetLayoutBinding>&& layout_bindings, VkDescriptorSetLayoutCreateFlags flags, Descriptor_Set_Layout& out_descriptor_set_layout)
+{
+    std::println("creating descriptor set layout...");
 
     VkDescriptorSetLayoutCreateInfo descriptor_set_layout_CI{
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = static_cast<Uint32>(vk_descriptor_layout_bindings.size()),
-        .pBindings = vk_descriptor_layout_bindings.data(),
+        .flags = flags,
+        .bindingCount = static_cast<Uint32>(layout_bindings.size()),
+        .pBindings = layout_bindings.data(),
     };
-
-    return create(device, descriptor_set_layout_CI);
-}
-
-std::optional<rdr::Descriptor_Set_Layout> rdr::Descriptor_Set_Layout::create(const Device& device, const VkDescriptorSetLayoutCreateInfo& create_info)
-{
-    std::println("creating descriptor set layout...");
     
     Descriptor_Set_Layout descriptor_set_layout;
     descriptor_set_layout.m_device = &device;
-
+    descriptor_set_layout.m_vk_layout_bindings = std::move(layout_bindings);
 #if LOG_RENDERER_OBJECT_NAMES
     static Uint64 name_index = 0;
     descriptor_set_layout.m_name = std::format("#{}", name_index++);
 #endif
 
-    VkResult result = vkCreateDescriptorSetLayout(device.vk_device(), &create_info, nullptr, &descriptor_set_layout.m_vk_descriptor_set_layout);
+    VkResult result = vkCreateDescriptorSetLayout(device.vk_device(), &descriptor_set_layout_CI, nullptr, &descriptor_set_layout.m_vk_descriptor_set_layout);
     if (result != VK_SUCCESS) {
         std::println("Could not create descriptor set layout: {}", static_cast<Sint32>(result));
-        return std::nullopt;
+        return false;
     }
 
-    return descriptor_set_layout;
+    out_descriptor_set_layout = std::move(descriptor_set_layout);
+    return true;
 }
