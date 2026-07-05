@@ -19,11 +19,11 @@ void rdr::Image::destroy()
     }
 }
 
-std::optional<rdr::Image> rdr::Image::create_depth_attachmnent(const Device& device, const Allocator& allocator, Uint32 width, Uint32 height)
+bool rdr::Image::create_depth_attachmnent(const Device& device, const Allocator& allocator, Uint32 width, Uint32 height, Image& out_image)
 {
     std::println("creating depth attachment...");
-    
-    std::array<VkFormat, 2> depth_formats { // note: ordered by priority
+
+    std::array<VkFormat, 2> depth_formats{ // note: ordered by priority
         VK_FORMAT_D32_SFLOAT_S8_UINT,
         VK_FORMAT_D24_UNORM_S8_UINT,
     };
@@ -40,20 +40,18 @@ std::optional<rdr::Image> rdr::Image::create_depth_attachmnent(const Device& dev
         }
     }
 
-    auto image_create_result = create(allocator, width, height, selected_depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT);
-    if (!image_create_result.has_value()) {
-        return std::nullopt;
+    if (!create(allocator, width, height, selected_depth_format, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, out_image)) {
+        return false;
     }
-    Image depth_image = std::move(image_create_result.value());
 #if LOG_RENDERER_OBJECT_NAMES
     static Uint64 depth_attachment_count = 0;
-    depth_image.m_image_name = std::format("depth attachment #{}", depth_attachment_count++);
+    out_image.m_image_name = std::format("depth attachment #{}", depth_attachment_count++);
 #endif
-    
-    return depth_image;
+
+    return true;
 }
 
-std::optional<rdr::Image> rdr::Image::create(const Allocator& allocator, Uint32 width, Uint32 height, VkFormat image_format, VkImageUsageFlags image_usage, VmaAllocationCreateFlags allocation_flags)
+bool rdr::Image::create(const Allocator& allocator, Uint32 width, Uint32 height, VkFormat image_format, VkImageUsageFlags image_usage, VmaAllocationCreateFlags allocation_flags, Image& out_image)
 {
     std::println("creating vk image...");
 
@@ -89,8 +87,9 @@ std::optional<rdr::Image> rdr::Image::create(const Allocator& allocator, Uint32 
     VkResult result = vmaCreateImage(allocator.vma_allocator(), &image_CI, &alloc_CI, &image.m_vk_image, &image.m_vma_allocation, nullptr);
     if (result != VK_SUCCESS) {
         std::println("failed to create vk image: {}", static_cast<Sint32>(result));
-        return std::nullopt;
+        return false;
     }
 
-    return image;
+    out_image = std::move(image);
+    return true;
 }

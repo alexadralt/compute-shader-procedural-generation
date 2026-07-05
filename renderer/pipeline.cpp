@@ -3,6 +3,7 @@
 #include <SDL3/SDL_stdinc.h>
 
 #include <print>
+#include <ranges>
 #include <cassert>
 
 #if LOG_RENDERER_OBJECT_NAMES
@@ -21,9 +22,9 @@ rdr::Pipeline::~Pipeline()
     }
 }
 
-std::vector<rdr::Pipeline> rdr::Pipeline::create_compute(const Device& device, std::span<Shader> shaders, std::span<Pipeline_Layout> pipeline_layouts)
+bool rdr::Pipeline::create_compute(const Device& device, std::span<Shader> shaders, std::span<Pipeline_Layout> pipeline_layouts, std::span<Pipeline> out_pipelines)
 {
-    assert(shaders.size() == pipeline_layouts.size());
+    assert(shaders.size() == pipeline_layouts.size() && pipeline_layouts.size() == out_pipelines.size());
 
     std::vector<VkComputePipelineCreateInfo> create_infos(shaders.size());
     for (size_t i = 0; i < create_infos.size(); ++i) {
@@ -38,32 +39,33 @@ std::vector<rdr::Pipeline> rdr::Pipeline::create_compute(const Device& device, s
         create_info.layout = pipeline_layouts[i].vk_pipeline_layout();
     }
 
-    return create_compute(device, std::span(create_infos));
+    return create_compute(device, create_infos, out_pipelines);
 }
 
-std::vector<rdr::Pipeline> rdr::Pipeline::create_compute(const Device& device, std::span<VkComputePipelineCreateInfo> create_infos)
+bool rdr::Pipeline::create_compute(const Device& device, std::span<VkComputePipelineCreateInfo> create_infos, std::span<Pipeline> out_pipelines)
 {
-    std::println("creating compute pipelines...");
+    assert(create_infos.size() == out_pipelines.size());
 
-    std::vector<Pipeline> compute_pipelines(create_infos.size());
-    for (Pipeline& pipeline : compute_pipelines) {
-        pipeline.m_device = &device;
-#if LOG_RENDERER_OBJECT_NAMES
-        static Uint64 name_index = 0;
-        pipeline.m_name = std::format("compute pipeline #{}", name_index++);
-#endif
-    }
+    std::println("creating compute pipelines...");
 
     std::vector<VkPipeline> vk_pipelines(create_infos.size());
     VkResult result = vkCreateComputePipelines(device.vk_device(), VK_NULL_HANDLE, static_cast<Uint32>(create_infos.size()), create_infos.data(), nullptr, vk_pipelines.data());
     if (result != VK_SUCCESS) {
         std::println("Could not create compute pipelines: {}", static_cast<Sint32>(result));
-        return std::vector<Pipeline>();
+        return false;
     }
 
-    for (size_t i = 0; i < compute_pipelines.size(); ++i) {
-        compute_pipelines[i].m_vk_pipeline = vk_pipelines[i];
+    for (auto [i, out_pipeline] : std::views::enumerate(out_pipelines)) {
+        Pipeline pipeline;
+        pipeline.m_device = &device;
+        pipeline.m_vk_pipeline = vk_pipelines[i];
+#if LOG_RENDERER_OBJECT_NAMES
+        static Uint64 name_index = 0;
+        pipeline.m_name = std::format("compute pipeline #{}", name_index++);
+#endif
+
+        out_pipeline = std::move(pipeline);
     }
 
-    return compute_pipelines;
+    return true;
 }

@@ -10,6 +10,7 @@
 #include <array>
 #include <filesystem>
 #include <format>
+#include <cassert>
 
 std::wstring rdr::Shader_Compiler::convert_to_utf_16(std::string_view input)
 {
@@ -41,7 +42,7 @@ rdr::Shader_Compiler::~Shader_Compiler()
     }
 }
 
-std::optional<rdr::Shader_Compiler> rdr::Shader_Compiler::create()
+bool rdr::Shader_Compiler::create(Shader_Compiler& out_shader_compiler)
 {
     std::println("creating shader compiler...");
     
@@ -51,31 +52,32 @@ std::optional<rdr::Shader_Compiler> rdr::Shader_Compiler::create()
     result = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&compiler.m_dxc_library));
     if (FAILED(result)) {
         std::println("Could not create dxc library instance: {}", result);
-        return std::nullopt;
+        return false;
     }
 
     result = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler.m_dxc_compiler));
     if (FAILED(result)) {
         std::println("Could not create dxc compiler instance: {}", result);
-        return std::nullopt;
+        return false;
     }
 
     result = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&compiler.m_dxc_utils));
     if (FAILED(result)) {
         std::println("Could not create dxc utils instance: {}", result);
-        return std::nullopt;
+        return false;
     }
 
-    return compiler;
+    out_shader_compiler = std::move(compiler);
+    return true;
 }
 
-std::optional<rdr::Shader> rdr::Shader_Compiler::compile_from_source_file(const Device& device, std::string_view source_path, Shader_Type shader_type)
+bool rdr::Shader_Compiler::compile_from_source_file(const Device& device, std::string_view source_path, Shader_Type shader_type, Shader& out_shader)
 {
     std::println("compiling shader {}...", source_path);
 
     if (!std::filesystem::exists(source_path)) {
         std::println("Error: path {} does not exist", std::filesystem::absolute(source_path).string());
-        return std::nullopt;
+        return false;
     }
 
     std::wstring source_path_wide = convert_to_utf_16(source_path);
@@ -87,7 +89,7 @@ std::optional<rdr::Shader> rdr::Shader_Compiler::compile_from_source_file(const 
     result = m_dxc_utils->LoadFile(source_path_wide.data(), &code_page, &source_blob);
     if (FAILED(result)) {
         std::println("Could not load source file: {}", result);
-        return std::nullopt;
+        return false;
     }
 
     const wchar_t* shader_profile;
@@ -106,7 +108,8 @@ std::optional<rdr::Shader> rdr::Shader_Compiler::compile_from_source_file(const 
         } break;
         default:
         {
-            return std::nullopt;
+            assert(false);
+            return false;
         }
     }
 
@@ -131,7 +134,7 @@ std::optional<rdr::Shader> rdr::Shader_Compiler::compile_from_source_file(const 
         HRESULT compilation_get_status_result = compilation_result->GetStatus(&result);
         if (FAILED(compilation_get_status_result)) {
             std::println("Could not get compilation status: {}", compilation_get_status_result);
-            return std::nullopt;
+            return false;
         }
 
         if (FAILED(result)) {
@@ -141,12 +144,12 @@ std::optional<rdr::Shader> rdr::Shader_Compiler::compile_from_source_file(const 
                 SUCCEEDED(result)
                 ? static_cast<const char*>(error_blob->GetBufferPointer())
                 : std::format("error when getting error buffer: {}", result));
-            return std::nullopt;
+            return false;
         }
     }
     else {
         std::println("Could not run the compiler: {}", result);
-        return std::nullopt;
+        return false;
     }
 
     CComPtr<IDxcBlob> code;
@@ -162,19 +165,21 @@ std::optional<rdr::Shader> rdr::Shader_Compiler::compile_from_source_file(const 
     VkResult vk_result = vkCreateShaderModule(device.vk_device(), &shader_module_CI, nullptr, &shader_module);
     if (vk_result != VK_SUCCESS) {
         std::println("Could not create shader module: {}", static_cast<Sint32>(vk_result));
-        return std::nullopt;
+        return false;
     }
 
-    SpvReflectShaderModule* spv_shader_module = new SpvReflectShaderModule();
-    SpvReflectResult spv_result = spvReflectCreateShaderModule(code->GetBufferSize(), code->GetBufferPointer(), spv_shader_module);
+    std::unique_ptr<SpvReflectShaderModule> spv_shader_module = std::make_unique<SpvReflectShaderModule>();
+    SpvReflectResult spv_result = spvReflectCreateShaderModule(code->GetBufferSize(), code->GetBufferPointer(), spv_shader_module.get());
     if (spv_result != SPV_REFLECT_RESULT_SUCCESS) {
         std::println("Could not create spriv_reflect shader module: {}", static_cast<Sint32>(spv_result));
-        return std::nullopt;
+        return false;
     }
 
 #if LOG_RENDERER_OBJECT_NAMES
-    return Shader(device, shader_module, spv_shader_module, std::string(source_path));
+    Shader shader(device, shader_module, std::move(spv_shader_module), std::string(source_path));
 #else
-    return Shader(device, shader_module, spv_shader_module);
+    Shader shader(device, shader_module, std::move(spv_shader_module));
 #endif
+    out_shader = std::move(shader);
+    return true;
 }

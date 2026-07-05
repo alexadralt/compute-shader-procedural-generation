@@ -3,7 +3,6 @@
 #include <Volk/volk.h>
 #include <SDL3/SDL_stdinc.h>
 
-#include <optional>
 #include <vector>
 
 namespace rdr {
@@ -39,7 +38,7 @@ namespace rdr {
             return *this;
         }
 
-        static std::optional<Device> create();
+        static bool create(Device& out_device);
 
         VkInstance vk_instance() const { return m_vk_instance; }
         VkDevice vk_device() const { return m_vk_device; }

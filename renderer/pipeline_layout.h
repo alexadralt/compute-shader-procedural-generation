@@ -7,7 +7,6 @@
 #include <spirv_reflect.h>
 
 #include <utility>
-#include <optional>
 #include <span>
 
 #if LOG_RENDERER_OBJECT_NAMES
@@ -29,8 +28,8 @@ namespace rdr {
                             m_vk_pipeline_layout(VK_NULL_HANDLE) {}
         ~Pipeline_Layout();
 
-        static std::optional<Pipeline_Layout> create(const Device& device, std::span<const Descriptor_Set_Layout> descriptor_sets, std::span<SpvReflectBlockVariable*> push_constants, VkShaderStageFlags shader_stage_flags);
-        static std::optional<Pipeline_Layout> create(const Device& device, const VkPipelineLayoutCreateInfo& create_info);
+        static bool create(const Device& device, std::span<const Descriptor_Set_Layout> descriptor_sets, std::span<SpvReflectBlockVariable*> push_constants, VkShaderStageFlags shader_stage_flags, Pipeline_Layout& out_pipeline_layout);
+        static bool create(const Device& device, const VkPipelineLayoutCreateInfo& create_info, Pipeline_Layout& out_pipeline_layout);
 
         Pipeline_Layout(Pipeline_Layout&& other) noexcept : m_device(other.m_device),
                                                             m_vk_pipeline_layout(other.m_vk_pipeline_layout)

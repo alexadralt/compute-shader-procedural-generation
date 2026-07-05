@@ -17,7 +17,7 @@ void rdr::Surface::destroy()
     }
 }
 
-std::optional<rdr::Surface> rdr::Surface::create_window_and_surface(const Device& device, const char* window_title, Sint32 window_width, Sint32 window_height)
+bool rdr::Surface::create_window_and_surface(const Device& device, const char* window_title, Sint32 window_width, Sint32 window_height, Surface& out_surface)
 {
     std::println("creating window and vk surface...");
 
@@ -27,24 +27,24 @@ std::optional<rdr::Surface> rdr::Surface::create_window_and_surface(const Device
     surface.m_window = SDL_CreateWindow(window_title, window_width, window_height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
     if (!surface.m_window) {
         std::println("failed to create window: {}", SDL_GetError());
-        return std::nullopt;
+        return false;
     }
 
     if (!SDL_Vulkan_CreateSurface(surface.m_window, device.vk_instance(), nullptr, &surface.m_vk_surface)) {
         std::println("failed to create vk surface: {}", SDL_GetError());
-        return std::nullopt;
+        return false;
     }
 
-    return surface;
+    out_surface = std::move(surface);
+    return true;
 }
 
-std::optional<VkSurfaceCapabilitiesKHR> rdr::Surface::get_surface_caps_khr() const
+bool rdr::Surface::get_surface_caps_khr(VkSurfaceCapabilitiesKHR& out_surface_caps) const
 {
-    VkSurfaceCapabilitiesKHR caps{};
-    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_device->vk_phys_device(), m_vk_surface, &caps) != VK_SUCCESS) {
+    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_device->vk_phys_device(), m_vk_surface, &out_surface_caps) != VK_SUCCESS) {
         std::println("failed to get vk surface capabilities");
-        return std::nullopt;
+        return false;
     }
 
-    return caps;
+    return true;
 }

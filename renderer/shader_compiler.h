@@ -3,7 +3,6 @@
 #include "shader.h"
 
 #include <utility>
-#include <optional>
 #include <string>
 #include <string_view>
 
@@ -27,7 +26,7 @@ namespace rdr {
                             m_dxc_utils(nullptr) {}
         ~Shader_Compiler();
 
-        static std::optional<Shader_Compiler> create();
+        static bool create(Shader_Compiler& out_shader_compiler);
 
         Shader_Compiler(Shader_Compiler&& other) noexcept : m_dxc_library(other.m_dxc_library),
                                                             m_dxc_compiler(other.m_dxc_compiler),
@@ -42,6 +41,6 @@ namespace rdr {
             return *this;
         }
 
-        std::optional<Shader> compile_from_source_file(const Device& device, std::string_view source_path, Shader_Type shader_type);
+        bool compile_from_source_file(const Device& device, std::string_view source_path, Shader_Type shader_type, Shader& out_shader);
     };
 }

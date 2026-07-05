@@ -7,8 +7,6 @@
 #include <vma/vk_mem_alloc.h>
 #include <SDL3/SDL_stdinc.h>
 
-#include <optional>
-
 namespace rdr {
     class Buffer {
         const Allocator* m_allocator;
@@ -38,7 +36,7 @@ namespace rdr {
             return *this;
         }
 
-        static std::optional<Buffer> create(const Allocator& allocator, Uint64 size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateFlags allocation_flags = 0);
+        static bool create(const Allocator& allocator, Uint64 size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateFlags allocation_flags, Buffer& out_buffer);
 
         VkBuffer vk_buffer() const { return m_vk_buffer; }
     };

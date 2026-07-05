@@ -28,8 +28,8 @@ namespace rdr {
                      m_vk_pipeline(VK_NULL_HANDLE) {}
         ~Pipeline();
 
-        static std::vector<Pipeline> create_compute(const Device& device, std::span<Shader> shaders, std::span<Pipeline_Layout> pipeline_layouts);
-        static std::vector<Pipeline> create_compute(const Device& device, std::span<VkComputePipelineCreateInfo> create_infos);
+        static bool create_compute(const Device& device, std::span<Shader> shaders, std::span<Pipeline_Layout> pipeline_layouts, std::span<Pipeline> out_pipelines);
+        static bool create_compute(const Device& device, std::span<VkComputePipelineCreateInfo> create_infos, std::span<Pipeline> out_pipelines);
 
         Pipeline(Pipeline&& other) noexcept : m_device(other.m_device),
                                               m_vk_pipeline(other.m_vk_pipeline)

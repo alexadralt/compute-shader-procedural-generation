@@ -5,8 +5,6 @@
 #include <Volk/volk.h>
 #include <SDL3/SDL_video.h>
 
-#include <optional>
-
 namespace rdr {
     class Surface {
         const Device* m_device;
@@ -18,7 +16,7 @@ namespace rdr {
 
         void destroy();
     public:
-        static std::optional<Surface> create_window_and_surface(const Device& device, const char* window_title, Sint32 window_width, Sint32 window_height);
+        static bool create_window_and_surface(const Device& device, const char* window_title, Sint32 window_width, Sint32 window_height, Surface& out_surface);
 
         Surface() : m_device(nullptr),
                     m_vk_surface(VK_NULL_HANDLE),
@@ -40,6 +38,6 @@ namespace rdr {
 
         SDL_Window* window() const { return m_window; }
         VkSurfaceKHR vk_surface() const { return m_vk_surface; }
-        std::optional<VkSurfaceCapabilitiesKHR> get_surface_caps_khr() const;
+        bool get_surface_caps_khr(VkSurfaceCapabilitiesKHR& out_surface_caps) const;
     };
 }

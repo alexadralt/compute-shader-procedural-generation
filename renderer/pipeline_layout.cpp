@@ -21,7 +21,7 @@ rdr::Pipeline_Layout::~Pipeline_Layout()
     }
 }
 
-std::optional<rdr::Pipeline_Layout> rdr::Pipeline_Layout::create(const Device& device, std::span<const Descriptor_Set_Layout> descriptor_sets, std::span<SpvReflectBlockVariable*> push_constants, VkShaderStageFlags shader_stage_flags)
+bool rdr::Pipeline_Layout::create(const Device& device, std::span<const Descriptor_Set_Layout> descriptor_sets, std::span<SpvReflectBlockVariable*> push_constants, VkShaderStageFlags shader_stage_flags, Pipeline_Layout& out_pipeline_layout)
 {
     std::vector<VkPushConstantRange> vk_push_constant_ranges(push_constants.size());
     for (size_t i = 0; i < push_constants.size(); ++i) {
@@ -44,10 +44,10 @@ std::optional<rdr::Pipeline_Layout> rdr::Pipeline_Layout::create(const Device& d
         .pPushConstantRanges = vk_push_constant_ranges.data(),
     };
 
-    return create(device, vk_pipeline_layout_CI);
+    return create(device, vk_pipeline_layout_CI, out_pipeline_layout);
 }
 
-std::optional<rdr::Pipeline_Layout> rdr::Pipeline_Layout::create(const Device& device, const VkPipelineLayoutCreateInfo& create_info)
+bool rdr::Pipeline_Layout::create(const Device& device, const VkPipelineLayoutCreateInfo& create_info, Pipeline_Layout& out_pipeline_layout)
 {
     std::println("creating pipeline layout...");
     
@@ -61,8 +61,9 @@ std::optional<rdr::Pipeline_Layout> rdr::Pipeline_Layout::create(const Device& d
     VkResult result = vkCreatePipelineLayout(device.vk_device(), &create_info, nullptr, &pipeline_layout.m_vk_pipeline_layout);
     if (result != VK_SUCCESS) {
         std::println("Could not create pipeline layout: {}", static_cast<Sint32>(result));
-        return std::nullopt;
+        return false;
     }
 
-    return pipeline_layout;
+    out_pipeline_layout = std::move(pipeline_layout);
+    return true;
 }

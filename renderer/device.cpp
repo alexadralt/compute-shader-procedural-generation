@@ -68,18 +68,18 @@ std::vector<const char*> rdr::Device::get_validation_layers()
     return validation_layers_to_enable;
 }
 
-std::optional<rdr::Device> rdr::Device::create()
+bool rdr::Device::create(Device& out_device)
 {
     std::println("calling SLD_Vulkan_LoadLibrary()...");
     if (!SDL_Vulkan_LoadLibrary(nullptr)) {
         std::println("failed to call SLD_Vulkan_LoadLibrary()");
-        return std::nullopt;
+        return false;
     }
 
     std::println("initializing volk...");
     if (volkInitialize() != VK_SUCCESS) {
         std::println("failed to initialize volk");
-        return std::nullopt;
+        return false;
     }
 
     Device device;
@@ -115,7 +115,7 @@ std::optional<rdr::Device> rdr::Device::create()
     std::println("creating vulkan instance...");
     if (vkCreateInstance(&instance_CI, nullptr, &device.m_vk_instance) != VK_SUCCESS) {
         std::println("failed to create vulkan instance");
-        return std::nullopt;
+        return false;
     }
 
     volkLoadInstance(device.m_vk_instance);
@@ -124,18 +124,18 @@ std::optional<rdr::Device> rdr::Device::create()
     Uint32 phys_device_count = 0;
     if (vkEnumeratePhysicalDevices(device.m_vk_instance, &phys_device_count, nullptr) != VK_SUCCESS) {
         std::println("failed to get count of physical devices");
-        return std::nullopt;
+        return false;
     }
 
     if (phys_device_count == 0) {
         std::println("found 0 physical devices");
-        return std::nullopt;
+        return false;
     }
     
     std::vector<VkPhysicalDevice> phys_devices(phys_device_count);
     if (vkEnumeratePhysicalDevices(device.m_vk_instance, &phys_device_count, phys_devices.data()) != VK_SUCCESS) {
         std::println("failed to get list of physical devices");
-        return std::nullopt;
+        return false;
     }
 
     std::println("found following physical devices:");
@@ -172,12 +172,12 @@ std::optional<rdr::Device> rdr::Device::create()
 
     if (selected_queue_family_index < 0) {
         std::println("failed to find matching queue family");
-        return std::nullopt;
+        return false;
     }
 
     if (!SDL_Vulkan_GetPresentationSupport(device.m_vk_instance, device.m_vk_phys_device, selected_phys_device_index)) {
         std::println("queue family does not support presentation");
-        return std::nullopt;
+        return false;
     }
 
     std::println("selected queue familly with index {}", selected_queue_family_index);
@@ -191,7 +191,7 @@ std::optional<rdr::Device> rdr::Device::create()
         .pQueuePriorities = &queue_priority
     };
 
-    const std::vector<const char*> device_extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    const std::array<const char*, 1> device_extensions{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
     VkPhysicalDeviceVulkan12Features enabled_vk_12_features{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
@@ -223,10 +223,11 @@ std::optional<rdr::Device> rdr::Device::create()
     };
     if (vkCreateDevice(device.m_vk_phys_device, &device_CI, nullptr, &device.m_vk_device) != VK_SUCCESS) {
         std::println("failed to create logical device");
-        return std::nullopt;
+        return false;
     }
 
     volkLoadDevice(device.m_vk_device);
 
-    return device;
+    out_device = std::move(device);
+    return true;
 }

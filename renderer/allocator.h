@@ -5,8 +5,6 @@
 #include <vma/vk_mem_alloc.h>
 #include <Volk/volk.h>
 
-#include <optional>
-
 namespace rdr {
     class Allocator {
         VmaAllocator m_vma_allocator;
@@ -16,7 +14,7 @@ namespace rdr {
 
         void destroy();
     public:
-        static std::optional<Allocator> create(const Device& device);
+        static bool create(const Device& device, Allocator& out_allocator);
         
         Allocator() : m_vma_allocator(VK_NULL_HANDLE) {}
         ~Allocator() { destroy(); }

@@ -10,7 +10,7 @@ void rdr::Swapchain::destroy()
     }
 }
 
-std::optional<rdr::Swapchain> rdr::Swapchain::create(const Device& device, const Surface& surface)
+bool rdr::Swapchain::create(const Device& device, const Surface& surface, Swapchain& out_swapchain)
 {
     std::println("creating swapchain...");
     
@@ -18,12 +18,11 @@ std::optional<rdr::Swapchain> rdr::Swapchain::create(const Device& device, const
     swapchain.m_device = &device;
     swapchain.m_image_format = VK_FORMAT_B8G8R8A8_SRGB;
 
-    auto surface_caps_result = surface.get_surface_caps_khr();
-    if (!surface_caps_result.has_value()) {
-        return std::nullopt;
+    VkSurfaceCapabilitiesKHR surface_caps;
+    if (!surface.get_surface_caps_khr(surface_caps)) {
+        return false;
     }
 
-    auto& surface_caps = surface_caps_result.value();
     VkExtent2D swapchain_extent = surface_caps.currentExtent;
     
     VkSwapchainCreateInfoKHR swapchain_CI{
@@ -41,10 +40,11 @@ std::optional<rdr::Swapchain> rdr::Swapchain::create(const Device& device, const
     };
     if (vkCreateSwapchainKHR(device.vk_device(), &swapchain_CI, nullptr, &swapchain.m_vk_swapchain) != VK_SUCCESS) {
         std::println("failed to create swapchain");
-        return std::nullopt;
+        return false;
     }
 
-    return swapchain;
+    out_swapchain = std::move(swapchain);
+    return true;
 }
 
 std::vector<rdr::Image> rdr::Swapchain::get_swapchain_images_khr() const
