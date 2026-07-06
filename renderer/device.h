@@ -1,5 +1,7 @@
 #pragma once
 
+#include "queue.h"
+
 #include <Volk/volk.h>
 #include <SDL3/SDL_stdinc.h>
 
@@ -34,6 +36,7 @@ namespace rdr {
         }
         
         Device& operator=(Device&& other) noexcept {
+            destroy();
             new (this) Device(std::move(other));
             return *this;
         }
@@ -44,5 +47,6 @@ namespace rdr {
         VkDevice vk_device() const { return m_vk_device; }
         VkPhysicalDevice vk_phys_device() const { return m_vk_phys_device; }
         Uint32 vk_queue_family_index() const { return m_vk_queue_family_index; }
+        Queue get_device_queue(uint32_t queue_index) const;
     };
 }

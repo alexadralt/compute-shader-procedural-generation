@@ -47,6 +47,7 @@ bool App::init()
     if (!rdr::Device::create(m_rdr_device)) {
         return false;
     }
+    m_rdr_queue = m_rdr_device.get_device_queue(0);
 
     if (!rdr::Allocator::create(m_rdr_device, m_rdr_allocator)) {
         return false;
@@ -62,9 +63,15 @@ bool App::init()
     }
 
     m_rdr_swapchain_images = m_rdr_swapchain.get_swapchain_images_khr();
-    if (m_rdr_swapchain_images.size() != Frames_In_Flight) {
+    if (m_rdr_swapchain_images.size() < Frames_In_Flight) {
         std::println("Got unexpected number of swapchain images: {} (Frames_In_Flight == {})", m_rdr_swapchain_images.size(), Frames_In_Flight);
         return false;
+    }
+    m_wait_renderer_complete_semaphores.resize(m_rdr_swapchain_images.size());
+    for (auto& semaphore : m_wait_renderer_complete_semaphores) {
+        if (!rdr::Semaphore::create(m_rdr_device, semaphore)) {
+            return false;
+        }
     }
 
     rdr::Shader_Compiler shader_compiler;
@@ -122,6 +129,34 @@ bool App::init()
         m_terrain_gen_descriptor_set.write_storage_image(1, std::span(&terrain_image_info, 1)),
     };
     rdr::Descriptor_Set::update_descriptor_sets(m_rdr_device, write_descriptor_set, std::span<VkCopyDescriptorSet>());
+
+    for (auto& shader_buffer : m_terrain_gen_shader_data_buffers) {
+        if (!rdr::Buffer::create(m_rdr_allocator, sizeof(Terrain_Gen_Shader_Data),
+                                 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                                 shader_buffer)) {
+            return false;
+        }
+    }
+
+    for (auto& fence : m_next_frame_fences) {
+        if (!rdr::Fence::create(m_rdr_device, true, fence)) {
+            return false;
+        }
+    }
+
+    for (auto& semaphore : m_wait_image_acquired_semaphores) {
+        if (!rdr::Semaphore::create(m_rdr_device, semaphore)) {
+            return false;
+        }
+    }
+
+    if (!rdr::Command_Pool::create(m_rdr_device, m_rdr_device.vk_queue_family_index(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, m_command_pool)) {
+        return false;
+    }
+    if (!m_command_pool.allocate_command_buffers(m_command_buffers)) {
+        return false;
+    }
 
     return true;
 }

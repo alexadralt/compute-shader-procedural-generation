@@ -15,6 +15,7 @@ bool rdr::Allocator::create(const Device& device, Allocator& out_allocator)
     std::println("creating vma allocator...");
 
     Allocator allocator;
+    allocator.m_device = &device;
 
     VmaVulkanFunctions vk_functions {};
 

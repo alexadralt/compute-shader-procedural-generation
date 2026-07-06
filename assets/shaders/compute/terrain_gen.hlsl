@@ -3,18 +3,25 @@ RWStructuredBuffer<float> height_map : register(u0, space0);
 [[vk::image_format("rgba8")]]
 RWTexture2D<unorm float4> height_map_image : register(u1, space0);
 
-struct TerrainGenerationSettings
+struct Terrain_Generation_Settings
 {
     uint terrain_size;
     float frequency;
     float amplitude;
 };
 
+struct Push_Constants
+{
+    vk::BufferPointer<Terrain_Generation_Settings> terrain_gen_settings;
+};
+
 [[vk::push_constant]]
-TerrainGenerationSettings terrain_generation_settings;
+Push_Constants push_constants;
 
 float noise(float2 coords)
 {
+    Terrain_Generation_Settings terrain_generation_settings = push_constants.terrain_gen_settings.Get();
+    
     float value = coords.x + coords.y;
     float scaled = value / (terrain_generation_settings.frequency * terrain_generation_settings.terrain_size * 2);
     return scaled * 2.0 - 1.0;
@@ -23,6 +30,8 @@ float noise(float2 coords)
 [numthreads(8, 8, 1)]
 void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
+    Terrain_Generation_Settings terrain_generation_settings = push_constants.terrain_gen_settings.Get();
+    
     uint terrain_size = terrain_generation_settings.terrain_size;
     float frequency = terrain_generation_settings.frequency;
     float amplitude = terrain_generation_settings.amplitude;

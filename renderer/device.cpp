@@ -231,3 +231,10 @@ bool rdr::Device::create(Device& out_device)
     out_device = std::move(device);
     return true;
 }
+
+rdr::Queue rdr::Device::get_device_queue(uint32_t queue_index) const
+{
+    VkQueue queue;
+    vkGetDeviceQueue(m_vk_device, m_vk_queue_family_index, queue_index, &queue);
+    return Queue(queue);
+}

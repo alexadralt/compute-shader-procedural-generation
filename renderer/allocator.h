@@ -7,6 +7,7 @@
 
 namespace rdr {
     class Allocator {
+        const Device* m_device;
         VmaAllocator m_vma_allocator;
 
         Allocator(const Allocator& other) = delete;
@@ -16,10 +17,12 @@ namespace rdr {
     public:
         static bool create(const Device& device, Allocator& out_allocator);
         
-        Allocator() : m_vma_allocator(VK_NULL_HANDLE) {}
+        Allocator() : m_device(nullptr),
+                      m_vma_allocator(VK_NULL_HANDLE) {}
         ~Allocator() { destroy(); }
 
-        Allocator(Allocator&& other) noexcept : m_vma_allocator(other.m_vma_allocator)
+        Allocator(Allocator&& other) noexcept : m_device(other.m_device),
+                                                m_vma_allocator(other.m_vma_allocator)
         {
             new (&other) Allocator();
         }
@@ -31,5 +34,6 @@ namespace rdr {
         }
 
         VmaAllocator vma_allocator() const { return m_vma_allocator; }
+        const Device* device() const { return m_device; }
     };
 }
