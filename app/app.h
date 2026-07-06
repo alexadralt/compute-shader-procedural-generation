@@ -24,7 +24,9 @@ class App {
     rdr::Allocator m_rdr_allocator;
     rdr::Surface m_rdr_surface;
     rdr::Swapchain m_rdr_swapchain;
+    std::vector<rdr::Image> m_rdr_swapchain_images;
     
+    static constexpr size_t Frames_In_Flight = 2;
     static constexpr size_t Compute_Pipeline_Count = 1;
 
     rdr::Shader m_terrain_gen_shader;
@@ -41,6 +43,9 @@ class App {
 
     static constexpr Uint32 Terrain_Size = 1000;
 
+    void process_events(bool& running);
+    void update(float dt);
+    void render(float dt);
 public:
     App() : m_window(nullptr) {};
     ~App() { quit(); };
@@ -53,5 +58,4 @@ public:
 
     bool init();
     void main_loop();
-    void process_events(bool& running);
 };

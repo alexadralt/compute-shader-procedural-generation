@@ -10,7 +10,7 @@ void rdr::Swapchain::destroy()
     }
 }
 
-bool rdr::Swapchain::create(const Device& device, const Surface& surface, Swapchain& out_swapchain)
+bool rdr::Swapchain::create(const Device& device, const Surface& surface, uint32_t frames_in_filght, Swapchain& out_swapchain)
 {
     std::println("creating swapchain...");
     
@@ -23,12 +23,22 @@ bool rdr::Swapchain::create(const Device& device, const Surface& surface, Swapch
         return false;
     }
 
+    if (frames_in_filght < surface_caps.minImageCount) {
+        std::println("requested number of frames in flight should be >= surface_caps.minImageCount ({})", surface_caps.minImageCount);
+        return false;
+    }
+
+    if (surface_caps.maxImageCount != 0 && frames_in_filght > surface_caps.maxImageCount) {
+        std::println("requested number of frames in flight should be <= surface_caps.maxImageCount ({})", surface_caps.maxImageCount);
+        return false;
+    }
+
     VkExtent2D swapchain_extent = surface_caps.currentExtent;
-    
+
     VkSwapchainCreateInfoKHR swapchain_CI{
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface.vk_surface(),
-        .minImageCount = surface_caps.minImageCount,
+        .minImageCount = frames_in_filght,
         .imageFormat = swapchain.m_image_format,
         .imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR,
         .imageExtent{.width = swapchain_extent.width, .height = swapchain_extent.height },

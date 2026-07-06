@@ -38,7 +38,7 @@ namespace rdr {
             return *this;
         }
 
-        static bool create(const Device& device, const Surface& surface, Swapchain& out_swapchain);
+        static bool create(const Device& device, const Surface& surface, uint32_t frames_in_filght, Swapchain& out_swapchain);
 
         VkFormat image_format() const { return m_image_format; }
         VkSwapchainKHR vk_swapchain() const { return m_vk_swapchain; }

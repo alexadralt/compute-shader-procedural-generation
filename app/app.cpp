@@ -13,6 +13,29 @@ void App::quit()
     SDL_Quit();
 }
 
+void App::process_events(bool& running)
+{
+    for (SDL_Event event; SDL_PollEvent(&event);) {
+        switch (event.type) {
+            case SDL_EVENT_QUIT:
+            {
+                std::println("quitting application...");
+                running = false;
+            } break;
+        }
+    }
+}
+
+void App::update(float dt)
+{
+    
+}
+
+void App::render(float dt)
+{
+
+}
+
 bool App::init()
 {
     std::println("initializing sdl...");
@@ -34,7 +57,13 @@ bool App::init()
     }
     m_window = m_rdr_surface.window();
 
-    if (!rdr::Swapchain::create(m_rdr_device, m_rdr_surface, m_rdr_swapchain)) {
+    if (!rdr::Swapchain::create(m_rdr_device, m_rdr_surface, Frames_In_Flight, m_rdr_swapchain)) {
+        return false;
+    }
+
+    m_rdr_swapchain_images = m_rdr_swapchain.get_swapchain_images_khr();
+    if (m_rdr_swapchain_images.size() != Frames_In_Flight) {
+        std::println("Got unexpected number of swapchain images: {} (Frames_In_Flight == {})", m_rdr_swapchain_images.size(), Frames_In_Flight);
         return false;
     }
 
@@ -99,21 +128,17 @@ bool App::init()
 
 void App::main_loop()
 {
+    uint64_t ticks_last_frame = SDL_GetTicks();
+
     bool running = true;
     while (running) {
         process_events(running);
-    }
-}
-
-void App::process_events(bool& running)
-{
-    for (SDL_Event event; SDL_PollEvent(&event);) {
-        switch (event.type) {
-            case SDL_EVENT_QUIT:
-            {
-                std::println("quitting application...");
-                running = false;
-            } break;
-        }
+        
+        uint64_t ticks_this_frame = SDL_GetTicks();
+        float dt = static_cast<float>(ticks_this_frame - ticks_last_frame) / 1000.f;
+        ticks_last_frame = ticks_this_frame;
+        
+        update(dt);
+        render(dt);
     }
 }
