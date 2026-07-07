@@ -32,6 +32,6 @@ namespace rdr {
             return *this;
         }
         
-        VkSemaphore vk_semaphore() const { return m_vk_semaphore; }
+        const VkSemaphore& vk_semaphore() const { return m_vk_semaphore; }
     };
 }

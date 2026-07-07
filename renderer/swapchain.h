@@ -3,6 +3,7 @@
 #include "surface.h"
 #include "device.h"
 #include "image.h"
+#include "semaphore.h"
 
 #include <Volk/volk.h>
 
@@ -40,8 +41,12 @@ namespace rdr {
 
         static bool create(const Device& device, const Surface& surface, uint32_t frames_in_filght, Swapchain& out_swapchain);
 
-        VkFormat image_format() const { return m_image_format; }
-        VkSwapchainKHR vk_swapchain() const { return m_vk_swapchain; }
+        const VkFormat& image_format() const { return m_image_format; }
+        const VkSwapchainKHR& vk_swapchain() const { return m_vk_swapchain; }
         std::vector<Image> get_swapchain_images_khr() const;
+        
+        VkResult acquire_next_image(const Semaphore& semaphore, uint32_t& out_index, uint64_t timeout = 0xFFFFFFFFFFFFFFFF) const {
+            return vkAcquireNextImageKHR(m_device->vk_device(), m_vk_swapchain, timeout, semaphore.vk_semaphore(), VK_NULL_HANDLE, &out_index);
+        }
     };
 }

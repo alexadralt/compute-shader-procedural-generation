@@ -56,8 +56,8 @@ namespace rdr {
 
         static bool create(const Allocator& allocator, Uint64 size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateFlags allocation_flags, Buffer& out_buffer);
 
-        VkBuffer vk_buffer() const { return m_vk_buffer; }
-        VkDeviceAddress vk_device_address() const { return m_vk_device_address; }
-        void* mapped_data() const { return m_mapped_data; }
+        const VkBuffer& vk_buffer() const { return m_vk_buffer; }
+        const VkDeviceAddress& vk_device_address() const { return m_vk_device_address; }
+        void* const& mapped_data() const { return m_mapped_data; }
     };
 }

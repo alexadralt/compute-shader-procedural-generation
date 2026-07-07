@@ -25,7 +25,7 @@ namespace rdr {
         void destroy();
     public:
         static bool create_depth_attachmnent(const Device& device, const Allocator& allocator, Uint32 width, Uint32 height, Image& out_image);
-        static bool create(const Allocator& allocator, Uint32 width, Uint32 height, VkFormat image_format, VkImageUsageFlags image_usage, VmaAllocationCreateFlags allocation_flags, Image& out_image);
+        static bool create(const Allocator& allocator, Uint32 width, Uint32 height, VkFormat image_format, VkImageUsageFlags image_usage, VmaAllocationCreateFlags allocation_flags, Image& out_image, VkImageCreateFlags flags = 0);
 
         Image() : m_allocator(nullptr),
                   m_vma_allocation(VK_NULL_HANDLE),

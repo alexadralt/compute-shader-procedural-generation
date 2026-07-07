@@ -31,3 +31,23 @@ bool rdr::Fence::create(const Device& device, bool signaled, Fence& out_fence)
     out_fence = std::move(fence);
     return true;
 }
+
+bool rdr::Fence::wait(uint64_t timeout) const
+{
+    VkResult result = vkWaitForFences(m_device->vk_device(), 1, &m_vk_fence, true, timeout);
+    if (result != VK_SUCCESS) {
+        std::println("Could not wait for fence: {}", static_cast<int32_t>(result));
+    }
+
+    return result == VK_SUCCESS;
+}
+
+bool rdr::Fence::reset() const
+{
+    VkResult result = vkResetFences(m_device->vk_device(), 1, &m_vk_fence);
+    if (result != VK_SUCCESS) {
+        std::println("Could not reset fence: {}", static_cast<int32_t>(result));
+    }
+
+    return result == VK_SUCCESS;
+}

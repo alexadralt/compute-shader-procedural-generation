@@ -5,6 +5,7 @@
 #include <Volk/volk.h>
 
 #include <utility>
+#include <span>
 
 namespace rdr {
     class Fence {
@@ -33,5 +34,7 @@ namespace rdr {
         }
 
         VkFence vk_fence() const { return m_vk_fence; }
+        bool wait(uint64_t timeout = 0xFFFFFFFFFFFFFFFF) const;
+        bool reset() const;
     };
 }

@@ -17,7 +17,7 @@ namespace rdr {
             vkUpdateDescriptorSets(device.vk_device(), static_cast<uint32_t>(write_descriptor_sets.size()), write_descriptor_sets.data(), static_cast<uint32_t>(copy_descriptor_sets.size()), copy_descriptor_sets.data());
         }
         
-        VkDescriptorSet vk_descriptor_set() const { return m_vk_descriptor_set; }
+        const VkDescriptorSet& vk_descriptor_set() const { return m_vk_descriptor_set; }
         
         VkWriteDescriptorSet write_storage_image(uint32_t binding, std::span<VkDescriptorImageInfo> image_infos) const {
             return VkWriteDescriptorSet{

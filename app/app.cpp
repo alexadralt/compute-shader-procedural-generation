@@ -3,6 +3,14 @@
 #include <renderer/shader_compiler.h>
 
 #include <print>
+#include <cassert>
+
+#define Vk_Check(call) \
+    if ((call) != VK_SUCCESS) \
+        assert(false)
+#define Check(call) \
+    if (!(call)) \
+        assert(false)
 
 void App::quit()
 {
@@ -33,7 +41,207 @@ void App::update(float dt)
 
 void App::render(float dt)
 {
+    Check(m_next_frame_fences[m_frame_index].wait());
+    Check(m_next_frame_fences[m_frame_index].reset());
 
+    uint32_t image_index;
+    Vk_Check(m_rdr_swapchain.acquire_next_image(m_wait_image_acquired_semaphores[m_frame_index], image_index));
+
+    memcpy(m_terrain_gen_shader_data_buffers[m_frame_index].mapped_data(), &m_terrain_gen_shader_data, sizeof(Terrain_Gen_Shader_Data));
+
+    auto& cmd = m_command_buffers[m_frame_index];
+    Vk_Check(vkResetCommandBuffer(cmd.vk_command_buffer(), 0));
+
+    VkCommandBufferBeginInfo cmd_begin_info{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+    };
+    Vk_Check(vkBeginCommandBuffer(cmd.vk_command_buffer(), &cmd_begin_info));
+
+    std::array<VkImageMemoryBarrier2, 1> image_barriers{
+        VkImageMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_terrain_height_map_image.vk_image(),
+            .subresourceRange{
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            },
+        },
+    };
+    VkBufferMemoryBarrier2 buffer_barrier{
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .srcAccessMask = VK_ACCESS_2_NONE,
+        .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = m_terrain_heght_map_buffer.vk_buffer(),
+        .offset = 0,
+        .size = VK_WHOLE_SIZE,
+    };
+    VkDependencyInfo dependency_info{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .bufferMemoryBarrierCount = 1,
+        .pBufferMemoryBarriers = &buffer_barrier,
+        .imageMemoryBarrierCount = static_cast<uint32_t>(image_barriers.size()),
+        .pImageMemoryBarriers = image_barriers.data(),
+    };
+    vkCmdPipelineBarrier2(cmd.vk_command_buffer(), &dependency_info);
+
+    vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Compute_Pipelines_Terrain_Gen].vk_pipeline());
+    
+    vkCmdBindDescriptorSets(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
+                            m_compute_pipeline_layouts[Compute_Pipelines_Terrain_Gen].vk_pipeline_layout(),
+                            0, 1, &m_terrain_gen_descriptor_set.vk_descriptor_set(), 0, nullptr);
+
+    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Compute_Pipelines_Terrain_Gen].vk_pipeline_layout(),
+                       VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VkDeviceAddress), &m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address());
+
+    vkCmdDispatch(cmd.vk_command_buffer(), 128, 128, 1);
+
+    std::array<VkImageMemoryBarrier2, 2> blit_image_barriers{
+        VkImageMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
+            .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_rdr_swapchain_images[image_index].vk_image(),
+            .subresourceRange{
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            },
+        },
+        VkImageMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
+            .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_terrain_height_map_image.vk_image(),
+            .subresourceRange{
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            },
+        }
+    };
+    VkDependencyInfo blit_barrier_dependency_info{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers = nullptr,
+        .imageMemoryBarrierCount = static_cast<uint32_t>(blit_image_barriers.size()),
+        .pImageMemoryBarriers = blit_image_barriers.data(),
+    };
+    vkCmdPipelineBarrier2(cmd.vk_command_buffer(), &blit_barrier_dependency_info);
+
+    VkClearColorValue clear_color = { 0, 0, 0, 0 };
+    VkImageSubresourceRange clear_subresource_range{
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .levelCount = 1,
+        .layerCount = 1
+    };
+    vkCmdClearColorImage(cmd.vk_command_buffer(), m_rdr_swapchain_images[image_index].vk_image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color, 1, &clear_subresource_range);
+
+    VkSurfaceCapabilitiesKHR surface_caps{};
+    Check(m_rdr_surface.get_surface_caps_khr(surface_caps));
+    auto& extent = surface_caps.currentExtent;
+
+    int32_t blit_size_x = static_cast<int32_t>(std::min(extent.width, Terrain_Size));
+    int32_t blit_size_y = static_cast<int32_t>(std::min(extent.height, Terrain_Size));
+
+    VkImageBlit blit{
+        .srcSubresource = VkImageSubresourceLayers{
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .srcOffsets = {
+            VkOffset3D{ 0, 0, 0 },
+            VkOffset3D{ blit_size_x, blit_size_y, 1 }
+        },
+        .dstSubresource = VkImageSubresourceLayers{
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .dstOffsets = {
+            VkOffset3D{ 0, 0, 0 },
+            VkOffset3D{ blit_size_x, blit_size_y, 1 }
+        },
+    };
+    vkCmdBlitImage(cmd.vk_command_buffer(),
+                   m_terrain_height_map_image.vk_image(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   m_rdr_swapchain_images[image_index].vk_image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   1, &blit, VK_FILTER_NEAREST);
+
+    VkImageMemoryBarrier2 blit_to_present_image_barrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
+        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+        .dstAccessMask = VK_ACCESS_2_NONE,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = m_rdr_swapchain_images[image_index].vk_image(),
+        .subresourceRange{
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1
+        },
+    };
+    VkDependencyInfo blit_to_present_barrier_dependency_info{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers = nullptr,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &blit_to_present_image_barrier,
+    };
+    vkCmdPipelineBarrier2(cmd.vk_command_buffer(), &blit_to_present_barrier_dependency_info);
+
+    Vk_Check(vkEndCommandBuffer(cmd.vk_command_buffer()));
+
+    VkPipelineStageFlags stage_flags = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    m_rdr_queue.submit(std::span(&m_wait_image_acquired_semaphores[m_frame_index], 1),
+                       std::span(&stage_flags, 1),
+                       std::span(&cmd, 1),
+                       std::span(&m_wait_renderer_complete_semaphores[image_index], 1),
+                       m_next_frame_fences[m_frame_index]);
+    
+    m_frame_index = (m_frame_index + 1) % Frames_In_Flight;
+
+    VkPresentInfoKHR present_info{
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &m_wait_renderer_complete_semaphores[image_index].vk_semaphore(),
+        .swapchainCount = 1,
+        .pSwapchains = &m_rdr_swapchain.vk_swapchain(),
+        .pImageIndices = &image_index,
+    };
+    Vk_Check(vkQueuePresentKHR(m_rdr_queue.vk_queue(), &present_info));
 }
 
 bool App::init()
@@ -86,15 +294,15 @@ bool App::init()
         return false;
     }
 
-    if (!rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, m_terrain_heght_map_buffer)) {
+    if (!rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size * sizeof(float), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, m_terrain_heght_map_buffer)) {
         return false;
     }
 
-    if (!rdr::Image::create(m_rdr_allocator, Terrain_Size, Terrain_Size, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0, m_terrain_height_map_image)) {
+    if (!rdr::Image::create(m_rdr_allocator, Terrain_Size, Terrain_Size, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0, m_terrain_height_map_image, VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)) {
         return false;
     }
 
-    if (!rdr::Image_View::create(m_rdr_device, m_terrain_height_map_image, 0, VK_FORMAT_B8G8R8A8_UNORM, m_terraing_height_map_image_view)) {
+    if (!rdr::Image_View::create(m_rdr_device, m_terrain_height_map_image, 0, VK_FORMAT_R8G8B8A8_UNORM, m_terraing_height_map_image_view)) {
         return false;
     }
 

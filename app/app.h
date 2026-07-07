@@ -25,20 +25,20 @@
 #include <vector>
 
 class App {
+    static constexpr size_t Frames_In_Flight = 3;
+    static constexpr uint32_t Terrain_Size = 1024;
+    
     struct Terrain_Gen_Shader_Data {
-        uint32_t terrain_size;
-        float frequency;
-        float amplitude;
+        uint32_t terrain_size = Terrain_Size;
+        float frequency = 1;
+        float amplitude = 1;
     };
 
-    enum class Compute_Pipelines {
-        Terrain_Gen = 0,
+    enum Compute_Pipelines : size_t {
+        Compute_Pipelines_Terrain_Gen = 0,
         
-        Compute_Pipeline_Count
+        Compute_Pipelines_Count
     };
-
-    static constexpr size_t Frames_In_Flight = 2;
-    static constexpr Uint32 Terrain_Size = 1000;
     
     SDL_Window* m_window;
     rdr::Device m_rdr_device; // note: it is important that m_rdr_xxx fields are declared in order they are initialized so that desctuctors are called in correct order (I love C++)
@@ -53,8 +53,8 @@ class App {
     rdr::Buffer m_terrain_heght_map_buffer;
     rdr::Image m_terrain_height_map_image;
     rdr::Image_View m_terraing_height_map_image_view;
-    std::array<rdr::Pipeline_Layout, static_cast<size_t>(Compute_Pipelines::Compute_Pipeline_Count)> m_compute_pipeline_layouts;
-    std::array<rdr::Pipeline, static_cast<size_t>(Compute_Pipelines::Compute_Pipeline_Count)> m_compute_pipelines;
+    std::array<rdr::Pipeline_Layout, Compute_Pipelines_Count> m_compute_pipeline_layouts;
+    std::array<rdr::Pipeline, Compute_Pipelines_Count> m_compute_pipelines;
     rdr::Descriptor_Pool m_descriptor_pool;
     rdr::Descriptor_Set m_terrain_gen_descriptor_set;
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_data_buffers;
@@ -64,13 +64,18 @@ class App {
     rdr::Command_Pool m_command_pool;
     std::array<rdr::Command_Buffer, Frames_In_Flight> m_command_buffers;
 
+    uint32_t m_frame_index;
+    Terrain_Gen_Shader_Data m_terrain_gen_shader_data;
+
     void quit();
 
     void process_events(bool& running);
     void update(float dt);
     void render(float dt);
 public:
-    App() : m_window(nullptr) {};
+    App() : m_window(nullptr),
+            m_frame_index(0),
+            m_terrain_gen_shader_data() {};
     ~App() { quit(); };
 
     App(const App& other) = delete;

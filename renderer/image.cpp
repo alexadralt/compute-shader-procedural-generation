@@ -51,7 +51,7 @@ bool rdr::Image::create_depth_attachmnent(const Device& device, const Allocator&
     return true;
 }
 
-bool rdr::Image::create(const Allocator& allocator, Uint32 width, Uint32 height, VkFormat image_format, VkImageUsageFlags image_usage, VmaAllocationCreateFlags allocation_flags, Image& out_image)
+bool rdr::Image::create(const Allocator& allocator, Uint32 width, Uint32 height, VkFormat image_format, VkImageUsageFlags image_usage, VmaAllocationCreateFlags allocation_flags, Image& out_image, VkImageCreateFlags flags)
 {
     std::println("creating vk image...");
 
@@ -64,6 +64,7 @@ bool rdr::Image::create(const Allocator& allocator, Uint32 width, Uint32 height,
 
     VkImageCreateInfo image_CI{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .flags = flags,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = image_format,
         .extent{
