@@ -46,7 +46,8 @@ bool rdr::Swapchain::create(const Device& device, const Surface& surface, uint32
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = VK_PRESENT_MODE_FIFO_KHR // <--- vsync
+        .presentMode = VK_PRESENT_MODE_FIFO_KHR, // <--- vsync
+        .oldSwapchain = out_swapchain.vk_swapchain(),
     };
     if (vkCreateSwapchainKHR(device.vk_device(), &swapchain_CI, nullptr, &swapchain.m_vk_swapchain) != VK_SUCCESS) {
         std::println("failed to create swapchain");

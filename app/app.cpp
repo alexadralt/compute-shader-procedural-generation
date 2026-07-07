@@ -31,6 +31,10 @@ void App::process_events(bool& running)
                 Vk_Check(vkDeviceWaitIdle(m_rdr_device.vk_device()));
                 running = false;
             } break;
+            case SDL_EVENT_WINDOW_RESIZED:
+            {
+                m_should_recreate_swapchain = true;
+            } break;
         }
     }
 }
@@ -42,11 +46,13 @@ void App::update(float dt)
 
 void App::render(float dt)
 {
+    maybe_update_swapchain();
+
     Check(m_next_frame_fences[m_frame_index].wait());
     Check(m_next_frame_fences[m_frame_index].reset());
 
     uint32_t image_index;
-    Vk_Check(m_rdr_swapchain.acquire_next_image(m_wait_image_acquired_semaphores[m_frame_index], image_index));
+    check_if_should_update_swapchain(m_rdr_swapchain.acquire_next_image(m_wait_image_acquired_semaphores[m_frame_index], image_index));
 
     memcpy(m_terrain_gen_shader_data_buffers[m_frame_index].mapped_data(), &m_terrain_gen_shader_data, sizeof(Terrain_Gen_Shader_Data));
 
@@ -225,7 +231,38 @@ void App::render(float dt)
         .pSwapchains = &m_rdr_swapchain.vk_swapchain(),
         .pImageIndices = &image_index,
     };
-    Vk_Check(vkQueuePresentKHR(m_rdr_queue.vk_queue(), &present_info));
+    check_if_should_update_swapchain(vkQueuePresentKHR(m_rdr_queue.vk_queue(), &present_info));
+}
+
+void App::maybe_update_swapchain()
+{
+    if (m_should_recreate_swapchain) {
+        m_should_recreate_swapchain = false;
+
+        vkDeviceWaitIdle(m_rdr_device.vk_device());
+
+        Check(rdr::Swapchain::create(m_rdr_device, m_rdr_surface, Frames_In_Flight, m_rdr_swapchain));
+        
+        m_rdr_swapchain_images = m_rdr_swapchain.get_swapchain_images_khr();
+        assert(m_rdr_swapchain_images.size() >= Frames_In_Flight);
+        
+        m_wait_renderer_complete_semaphores.resize(m_rdr_swapchain_images.size());
+        for (auto& semaphore : m_wait_renderer_complete_semaphores) {
+            Check(rdr::Semaphore::create(m_rdr_device, semaphore));
+        }
+    }
+}
+
+void App::check_if_should_update_swapchain(VkResult result)
+{
+    if (result != VK_SUCCESS) {
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+            m_should_recreate_swapchain = true;
+        }
+        else {
+            assert(false);
+        }
+    }
 }
 
 bool App::init()

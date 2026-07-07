@@ -66,16 +66,20 @@ class App {
 
     uint32_t m_frame_index;
     Terrain_Gen_Shader_Data m_terrain_gen_shader_data;
+    bool m_should_recreate_swapchain;
 
     void quit();
 
     void process_events(bool& running);
     void update(float dt);
     void render(float dt);
+    void maybe_update_swapchain();
+    void check_if_should_update_swapchain(VkResult result);
 public:
     App() : m_window(nullptr),
             m_frame_index(0),
-            m_terrain_gen_shader_data() {};
+            m_terrain_gen_shader_data(),
+            m_should_recreate_swapchain(false) {};
     ~App() { quit(); };
 
     App(const App& other) = delete;
