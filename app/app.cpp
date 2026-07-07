@@ -28,6 +28,7 @@ void App::process_events(bool& running)
             case SDL_EVENT_QUIT:
             {
                 std::println("quitting application...");
+                Vk_Check(vkDeviceWaitIdle(m_rdr_device.vk_device()));
                 running = false;
             } break;
         }
@@ -358,13 +359,13 @@ void App::main_loop()
 
     bool running = true;
     while (running) {
-        process_events(running);
-        
         uint64_t ticks_this_frame = SDL_GetTicks();
         float dt = static_cast<float>(ticks_this_frame - ticks_last_frame) / 1000.f;
         ticks_last_frame = ticks_this_frame;
         
         update(dt);
         render(dt);
+        
+        process_events(running);
     }
 }

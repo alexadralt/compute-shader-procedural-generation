@@ -57,12 +57,12 @@ class App {
     std::array<rdr::Pipeline, Compute_Pipelines_Count> m_compute_pipelines;
     rdr::Descriptor_Pool m_descriptor_pool;
     rdr::Descriptor_Set m_terrain_gen_descriptor_set;
+    rdr::Command_Pool m_command_pool;
+    std::array<rdr::Command_Buffer, Frames_In_Flight> m_command_buffers;
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_data_buffers;
     std::array<rdr::Fence, Frames_In_Flight> m_next_frame_fences;
     std::array<rdr::Semaphore, Frames_In_Flight> m_wait_image_acquired_semaphores;
     std::vector<rdr::Semaphore> m_wait_renderer_complete_semaphores;
-    rdr::Command_Pool m_command_pool;
-    std::array<rdr::Command_Buffer, Frames_In_Flight> m_command_buffers;
 
     uint32_t m_frame_index;
     Terrain_Gen_Shader_Data m_terrain_gen_shader_data;
