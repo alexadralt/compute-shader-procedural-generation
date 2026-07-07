@@ -77,26 +77,21 @@ void App::render(float dt)
             },
         },
     };
-    VkBufferMemoryBarrier2 buffer_barrier{
-        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        .srcAccessMask = VK_ACCESS_2_NONE,
-        .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-        .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .buffer = m_terrain_heght_map_buffer.vk_buffer(),
-        .offset = 0,
-        .size = VK_WHOLE_SIZE,
+    std::array<VkBufferMemoryBarrier2, 1> buffer_barriers{
+        VkBufferMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = m_terrain_heght_map_buffer.vk_buffer(),
+            .offset = 0,
+            .size = VK_WHOLE_SIZE,
+        },
     };
-    VkDependencyInfo dependency_info{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .bufferMemoryBarrierCount = 1,
-        .pBufferMemoryBarriers = &buffer_barrier,
-        .imageMemoryBarrierCount = static_cast<uint32_t>(image_barriers.size()),
-        .pImageMemoryBarriers = image_barriers.data(),
-    };
-    vkCmdPipelineBarrier2(cmd.vk_command_buffer(), &dependency_info);
+    cmd.pipeline_barrier(image_barriers, buffer_barriers);
 
     vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Compute_Pipelines_Terrain_Gen].vk_pipeline());
     
@@ -145,14 +140,7 @@ void App::render(float dt)
             },
         }
     };
-    VkDependencyInfo blit_barrier_dependency_info{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .bufferMemoryBarrierCount = 0,
-        .pBufferMemoryBarriers = nullptr,
-        .imageMemoryBarrierCount = static_cast<uint32_t>(blit_image_barriers.size()),
-        .pImageMemoryBarriers = blit_image_barriers.data(),
-    };
-    vkCmdPipelineBarrier2(cmd.vk_command_buffer(), &blit_barrier_dependency_info);
+    cmd.pipeline_barrier(blit_image_barriers, std::span<VkBufferMemoryBarrier2>());
 
     VkClearColorValue clear_color = { 0, 0, 0, 0 };
     VkImageSubresourceRange clear_subresource_range{
@@ -196,31 +184,26 @@ void App::render(float dt)
                    m_rdr_swapchain_images[image_index].vk_image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    1, &blit, VK_FILTER_NEAREST);
 
-    VkImageMemoryBarrier2 blit_to_present_image_barrier{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
-        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-        .dstAccessMask = VK_ACCESS_2_NONE,
-        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = m_rdr_swapchain_images[image_index].vk_image(),
-        .subresourceRange{
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .levelCount = 1,
-            .layerCount = 1
-        },
+    std::array<VkImageMemoryBarrier2, 1> blit_to_present_image_barriers{
+        VkImageMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
+            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .dstAccessMask = VK_ACCESS_2_NONE,
+            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_rdr_swapchain_images[image_index].vk_image(),
+            .subresourceRange{
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            },
+        }
     };
-    VkDependencyInfo blit_to_present_barrier_dependency_info{
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .bufferMemoryBarrierCount = 0,
-        .pBufferMemoryBarriers = nullptr,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers = &blit_to_present_image_barrier,
-    };
-    vkCmdPipelineBarrier2(cmd.vk_command_buffer(), &blit_to_present_barrier_dependency_info);
+    cmd.pipeline_barrier(blit_to_present_image_barriers, std::span<VkBufferMemoryBarrier2>());
 
     Vk_Check(vkEndCommandBuffer(cmd.vk_command_buffer()));
 
