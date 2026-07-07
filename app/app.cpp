@@ -109,7 +109,7 @@ void App::render(float dt)
     vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Compute_Pipelines_Terrain_Gen].vk_pipeline_layout(),
                        VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VkDeviceAddress), &m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address());
 
-    vkCmdDispatch(cmd.vk_command_buffer(), 128, 128, 1);
+    vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, 1);
 
     std::array<VkImageMemoryBarrier2, 2> blit_image_barriers{
         VkImageMemoryBarrier2{

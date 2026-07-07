@@ -30,7 +30,7 @@ class App {
     
     struct Terrain_Gen_Shader_Data {
         uint32_t terrain_size = Terrain_Size;
-        float frequency = 1;
+        float frequency = 0.01;
         float amplitude = 1;
     };
 
@@ -73,6 +73,7 @@ class App {
     void process_events(bool& running);
     void update(float dt);
     void render(float dt);
+    
     void maybe_update_swapchain();
     void check_if_should_update_swapchain(VkResult result);
 public:
