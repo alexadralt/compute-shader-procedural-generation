@@ -208,7 +208,8 @@ bool rdr::Device::create(Device& out_device)
         .dynamicRendering = true,
     };
     VkPhysicalDeviceFeatures enabled_vk_10_features{
-        .samplerAnisotropy = VK_TRUE
+        .samplerAnisotropy = true,
+        .shaderInt64 = true,
     };
 
     std::println("creating logical device...");

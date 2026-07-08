@@ -33,6 +33,7 @@ class App {
         float frequency = 0.0025f;
         float amplitude = 1;
         uint32_t octave_count = 5;
+        uint64_t seed = 0xFAFAFAFAFAFAFAFA;
     };
 
     enum Compute_Pipelines : size_t {
