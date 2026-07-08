@@ -1,23 +1,3 @@
-RWStructuredBuffer<float> height_map : register(u0, space0);
-
-[[vk::image_format("rgba8")]]
-RWTexture2D<unorm float4> height_map_image : register(u1, space0);
-
-struct Terrain_Generation_Settings
-{
-    uint terrain_size;
-    float frequency;
-    float amplitude;
-};
-
-struct Push_Constants
-{
-    vk::BufferPointer<Terrain_Generation_Settings> terrain_gen_settings;
-};
-
-[[vk::push_constant]]
-Push_Constants push_constants;
-
 inline float smax(float x, float y, float lambda)
 {
     return (x + y + sqrt((x - y) * (x - y) + lambda)) / 2;
@@ -41,7 +21,7 @@ static const uint grad_index_table[Grad_Index_Table_Size * 2] =
     49, 192, 214, 31, 181, 199, 106, 157, 184, 84, 204, 176, 115, 121, 50, 45, 127, 4, 150, 254,
     138, 236, 205, 93, 222, 114, 67, 29, 24, 72, 243, 141, 128, 195, 78, 66, 215, 61, 156, 18,
     
-    // duplicate to avoid index wrapping
+    // duplicate to avoid the need for index wrapping
     151, 160, 137, 91, 90, 15,
     131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140, 36, 103, 30, 69, 142, 8, 99, 37, 240, 21, 10, 23,
     190, 6, 148, 247, 120, 234, 75, 0, 26, 197, 62, 94, 252, 219, 203, 117, 35, 11, 32, 57, 177, 33,
@@ -57,22 +37,26 @@ static const uint grad_index_table[Grad_Index_Table_Size * 2] =
     138, 236, 205, 93, 222, 114, 67, 29, 24, 72, 243, 141, 128, 195, 78, 66, 215, 61, 156, 18
 };
 
-#define Grad_Table_Size 12
+#define Grad_Table_Size 16
 
 static const float2 grad_table[Grad_Table_Size] =
 {
-    float2( 1,  1),
-    float2(-1,  1),
-    float2( 1, -1),
-    float2(-1, -1),
-    float2( 1,  0),
-    float2(-1,  0),
+    float2( 1,  1) / 1.414213562373095f,
+    float2(-1,  1) / 1.414213562373095f,
+    float2( 1, -1) / 1.414213562373095f,
+    float2(-1, -1) / 1.414213562373095f,
     float2( 1,  0),
     float2(-1,  0),
     float2( 0,  1),
     float2( 0, -1),
-    float2( 0,  1),
-    float2( 0, -1)
+    float2( 0.009138395397176f,  0.999958243993000f), // sin(     pi / 6) , cos(     pi / 6)
+    float2( 0.018276027628547f,  0.999832979459129f), // sin(     pi / 3) , cos(     pi / 3)
+    float2( 0.009138395397176f, -0.999958243993000f), // sin( 5 * pi / 6) , cos( 5 * pi / 6)
+    float2( 0.018276027628547f, -0.999832979459129f), // sin( 2 * pi / 3) , cos( 2 * pi / 3)
+    float2(-0.009138395397176f,  0.999958243993000f), // sin(   - pi / 6) , cos(   - pi / 6)
+    float2(-0.018276027628547f,  0.999832979459129f), // sin(   - pi / 3) , cos(   - pi / 3)
+    float2(-0.009138395397176f, -0.999958243993000f), // sin(-5 * pi / 6) , cos(-5 * pi / 6)
+    float2(-0.018276027628547f, -0.999832979459129f), // sin(-2 * pi / 3) , cos(-2 * pi / 3)
 };
 
 inline uint3 grad_indices(uint2 cell_coords_quare_grid, uint2 cell_1_offset_sq_grid)
@@ -80,9 +64,9 @@ inline uint3 grad_indices(uint2 cell_coords_quare_grid, uint2 cell_1_offset_sq_g
     cell_coords_quare_grid &= Grad_Index_Table_Size - 1;
     
     uint3 grad_indices;
-    grad_indices.x = float(grad_index_table[cell_coords_quare_grid.x + grad_index_table[cell_coords_quare_grid.y]] % Grad_Table_Size);
-    grad_indices.y = float(grad_index_table[cell_coords_quare_grid.x + cell_1_offset_sq_grid.x + grad_index_table[cell_coords_quare_grid.y + cell_1_offset_sq_grid.y]] % Grad_Table_Size);
-    grad_indices.z = float(grad_index_table[cell_coords_quare_grid.x + 1 + grad_index_table[cell_coords_quare_grid.y + 1]] % Grad_Table_Size);
+    grad_indices.x = float(grad_index_table[cell_coords_quare_grid.x + grad_index_table[cell_coords_quare_grid.y]] & (Grad_Table_Size - 1));
+    grad_indices.y = float(grad_index_table[cell_coords_quare_grid.x + cell_1_offset_sq_grid.x + grad_index_table[cell_coords_quare_grid.y + cell_1_offset_sq_grid.y]] & (Grad_Table_Size - 1));
+    grad_indices.z = float(grad_index_table[cell_coords_quare_grid.x + 1 + grad_index_table[cell_coords_quare_grid.y + 1]] & (Grad_Table_Size - 1));
     
     return grad_indices;
 }
@@ -119,7 +103,7 @@ float simplex_noise_2d(float2 p)
     float3 weights = max(0.5 - square_distances, 0);
     weights = weights * weights * weights * weights;
     
-    uint3 grad_idx = grad_indices(uint2(cell_coords_sq_grid), cell_1_offset_sq_grid);
+    uint3 grad_idx = grad_indices(asuint(int2(cell_coords_sq_grid)), cell_1_offset_sq_grid);
     float3 grad_dots;
     grad_dots.x = dot(grad_table[grad_idx.x], p_to_cell_0);
     grad_dots.y = dot(grad_table[grad_idx.y], p_to_cell_1);
@@ -127,6 +111,28 @@ float simplex_noise_2d(float2 p)
     
     return dot(weights, grad_dots) * 70; // [-1; 1]
 }
+
+RWStructuredBuffer<float> height_map : register(u0, space0);
+
+[[vk::image_format("rgba8")]]
+RWTexture2D<unorm float4> height_map_image : register(u1, space0);
+
+struct Terrain_Generation_Settings
+{
+    uint terrain_size;
+    float frequency;
+    float amplitude;
+    uint octave_count;
+};
+
+struct Push_Constants
+{
+    vk::BufferPointer<Terrain_Generation_Settings>
+    terrain_gen_settings;
+};
+
+[[vk::push_constant]]
+Push_Constants push_constants;
 
 [numthreads(8, 8, 1)]
 void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
@@ -136,8 +142,14 @@ void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
     uint terrain_size = terrain_generation_settings.terrain_size;
     float frequency = terrain_generation_settings.frequency;
     float amplitude = terrain_generation_settings.amplitude;
+    uint octave_count = terrain_generation_settings.octave_count;
     
-    float noise_value = simplex_noise_2d(float2(dispatch_thread_id.xy) * frequency);
+    float noise_value = 0;
+    for (int octave = 1; octave <= octave_count; ++octave)
+    {
+        noise_value += simplex_noise_2d((float2(dispatch_thread_id.xy) - float(terrain_size / 2)) * frequency * float(octave));
+    }
+    noise_value /= float(octave_count);
     height_map[dispatch_thread_id.x * terrain_size + dispatch_thread_id.y] = noise_value * amplitude;
     
     float scaled_noise_value = (noise_value + 1.0) / 2.0;

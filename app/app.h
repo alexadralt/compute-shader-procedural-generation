@@ -30,8 +30,9 @@ class App {
     
     struct Terrain_Gen_Shader_Data {
         uint32_t terrain_size = Terrain_Size;
-        float frequency = 0.01;
+        float frequency = 0.0025f;
         float amplitude = 1;
+        uint32_t octave_count = 5;
     };
 
     enum Compute_Pipelines : size_t {
