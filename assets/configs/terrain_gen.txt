@@ -1,0 +1,4 @@
+frequency    0.005
+amplitude    1
+octave_count 3
+seed         0xFAFAFAFAFAFAFAFA

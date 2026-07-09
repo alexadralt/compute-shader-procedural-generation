@@ -23,6 +23,9 @@
 
 #include <array>
 #include <vector>
+#include <string>
+#include <string_view>
+#include <span>
 
 class App {
     static constexpr size_t Frames_In_Flight = 2;
@@ -32,7 +35,7 @@ class App {
         uint32_t terrain_size = Terrain_Size;
         float frequency = 0.0025f;
         float amplitude = 1;
-        uint32_t octave_count = 5;
+        uint32_t octave_count = 1;
         uint64_t seed = 0xFAFAFAFAFAFAFAFA;
     };
 
@@ -40,6 +43,24 @@ class App {
         Compute_Pipelines_Terrain_Gen = 0,
         
         Compute_Pipelines_Count
+    };
+
+    class Text_File {
+        std::string_view m_contents;
+
+    public:
+        Text_File() {};
+        ~Text_File();
+        
+        static bool open(const std::string& path, Text_File& out_text_file);
+
+        Text_File(const Text_File& other);
+        Text_File& operator=(const Text_File& other);
+
+        Text_File(Text_File&& other) noexcept;
+        Text_File& operator=(Text_File&& other) noexcept;
+
+        std::string_view contents() const { return m_contents; }
     };
     
     SDL_Window* m_window;
@@ -70,6 +91,9 @@ class App {
     Terrain_Gen_Shader_Data m_terrain_gen_shader_data;
     bool m_should_recreate_swapchain;
 
+    std::array<bool, SDL_SCANCODE_COUNT> m_keyboard_state;          // an array of keys that are being pressed this frame (we don't use SDL_GetKeyboardState() beacuse it would be inconvinient for our logic)
+    std::array<bool, SDL_SCANCODE_COUNT> m_keys_pressed_this_frame; // an array of keys that have received key down event this frame
+
     void quit();
 
     void process_events(bool& running);
@@ -78,11 +102,16 @@ class App {
     
     void maybe_update_swapchain();
     void check_if_should_update_swapchain(VkResult result);
+
+    static std::vector<std::string_view> lex_config_file(std::string_view text);
+    bool load_terrain_shader_data_from_file();
 public:
     App() : m_window(nullptr),
             m_frame_index(0),
             m_terrain_gen_shader_data(),
-            m_should_recreate_swapchain(false) {};
+            m_should_recreate_swapchain(false),
+            m_keyboard_state(),
+            m_keys_pressed_this_frame() {};
     ~App() { quit(); };
 
     App(const App& other) = delete;

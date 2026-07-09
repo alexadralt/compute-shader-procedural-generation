@@ -4,6 +4,10 @@
 
 #include <print>
 #include <cassert>
+#include <utility>
+#include <ranges>
+#include <charconv>
+#include <type_traits>
 
 #define Vk_Check(call) \
     if ((call) != VK_SUCCESS) \
@@ -23,6 +27,8 @@ void App::quit()
 
 void App::process_events(bool& running)
 {
+    memset(m_keys_pressed_this_frame.data(), 0, m_keys_pressed_this_frame.size()); // reset m_keys_pressed_this_frame array
+
     for (SDL_Event event; SDL_PollEvent(&event);) {
         switch (event.type) {
             case SDL_EVENT_QUIT:
@@ -35,13 +41,26 @@ void App::process_events(bool& running)
             {
                 m_should_recreate_swapchain = true;
             } break;
+            case SDL_EVENT_KEY_DOWN:
+            {
+                if (!m_keyboard_state[event.key.scancode]) {
+                    m_keys_pressed_this_frame[event.key.scancode] = true;
+                }
+                m_keyboard_state[event.key.scancode] = true; // if we used SDL_GetKeyboardState() this value would be true before entering this case block (which is not what we want)
+            } break;
+            case SDL_EVENT_KEY_UP:
+            {
+                m_keyboard_state[event.key.scancode] = false;
+            } break;
         }
     }
 }
 
 void App::update(float dt)
 {
-    
+    if (m_keys_pressed_this_frame[SDL_SCANCODE_R]) {
+        load_terrain_shader_data_from_file();
+    }
 }
 
 void App::render(float dt)
@@ -265,11 +284,115 @@ void App::check_if_should_update_swapchain(VkResult result)
     }
 }
 
+std::vector<std::string_view> App::lex_config_file(std::string_view text)
+{
+    std::vector<std::string_view> tokens;
+    tokens.reserve(256);
+
+    size_t line_start = 0;
+    for (auto [index, value] : std::views::enumerate(text)) {
+        size_t token_start = 0;
+        if (value == '\r' || value == '\n' || value == '\0') {
+            auto line = text.substr(line_start, index - line_start + 1);
+            line_start = value == '\r' ? index + 2 : index + 1;
+
+            for (auto [index, value] : std::views::enumerate(line)) {
+                if (value == ' ' || value == '\r' || value == '\n' || value == '\0') {
+                    if (token_start < static_cast<size_t>(index)) {
+                        tokens.push_back(line.substr(token_start, index - token_start));
+                    }
+
+                    token_start = index + 1;
+                }
+            }
+        }
+    }
+
+    return tokens;
+}
+
+template<typename T, typename V>
+bool parse_value(std::string_view value_name, size_t token_index, std::span<std::string_view> tokens, T&& value_parser, V& out_value) {
+    auto token = tokens[token_index];
+    if (strncmp(token.data(), value_name.data(), value_name.size()) == 0) {
+        if (token_index + 1 >= tokens.size()) {
+            std::println("Found no value for {}", value_name);
+            return false;
+        }
+        auto next_token = tokens[token_index + 1];
+        if (!value_parser(next_token, out_value)) {
+            std::println("Could not parse value for {}", value_name);
+            return false;
+        }
+    }
+
+    return true; // return true even if current token does not match value_name for convenience
+}
+
+template<typename T>
+auto value_parser() {
+    return [](std::string_view token, T& out_value) {
+        if constexpr (std::is_integral_v<T>) { // we have to branch here because the interface of std::from_chars() is different for floats and integers
+            if (token.starts_with("0x") || token.starts_with("0X")) { // check if token is a hex value starting with 0x... (necessary because of how std::from_chars() works)
+                token = token.substr(2, token.size() - 2);
+            }
+
+            auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), out_value, 10); // try parse as base 10 first
+            bool success = ec == std::errc() && ptr == token.data() + token.size();
+            if (!success) {
+                auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), out_value, 16); // then try parse as base 16 (hex) if failed
+                return ec == std::errc() && ptr == token.data() + token.size();
+            }
+            return true;
+        }
+        else {
+            auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), out_value);
+            return ec == std::errc() && ptr == token.data() + token.size();
+        }
+    };
+}
+
+bool App::load_terrain_shader_data_from_file()
+{
+    std::println("loading terrain gen config...");
+
+    Text_File file;
+    if (!Text_File::open("assets/configs/terrain_gen.txt", file)) {
+        return false;
+    }
+
+    auto tokens = lex_config_file(file.contents());
+
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        if (!parse_value("frequency", i, tokens, value_parser<float>(), m_terrain_gen_shader_data.frequency)) {
+            return false;
+        }
+
+        if (!parse_value("amplitude", i, tokens, value_parser<float>(), m_terrain_gen_shader_data.amplitude)) {
+            return false;
+        }
+
+        if (!parse_value("octave_count", i, tokens, value_parser<uint32_t>(), m_terrain_gen_shader_data.octave_count)) {
+            return false;
+        }
+
+        if (!parse_value("seed", i, tokens, value_parser<uint64_t>(), m_terrain_gen_shader_data.seed)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool App::init()
 {
     std::println("initializing sdl...");
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::println("Failed to initialize sdl: {}", SDL_GetError());
+        return false;
+    }
+
+    if (!load_terrain_shader_data_from_file()) {
         return false;
     }
 
@@ -405,4 +528,53 @@ void App::main_loop()
         
         process_events(running);
     }
+}
+
+bool App::Text_File::open(const std::string& path, Text_File& out_text_file)
+{
+    Text_File file;
+    size_t file_size;
+    void* data = SDL_LoadFile(path.c_str(), &file_size);
+    if (!data) {
+        std::println("Could not load file {}: {}", path, SDL_GetError());
+        return false;
+    }
+
+    file.m_contents = std::string_view(static_cast<char*>(data), file_size + 1); // string is null terminated so we do file_size + 1 for parsing convenience
+    out_text_file = std::move(file);
+    return true;
+}
+
+App::Text_File::~Text_File()
+{
+    if (m_contents.data()) {
+        SDL_free(const_cast<char*>(m_contents.data()));
+    }
+}
+
+App::Text_File::Text_File(const Text_File& other)
+{
+    void* data = SDL_malloc(other.m_contents.size());
+    memcpy(data, other.m_contents.data(), other.m_contents.size());
+    m_contents = std::string_view(static_cast<char*>(data), other.m_contents.size());
+}
+
+App::Text_File& App::Text_File::operator=(const Text_File& other)
+{
+    this->~Text_File();
+    new (this) Text_File(other);
+    return *this;
+}
+
+App::Text_File::Text_File(Text_File&& other) noexcept
+    : m_contents(other.m_contents)
+{
+    new (&other) Text_File();
+}
+
+App::Text_File& App::Text_File::operator=(Text_File&& other) noexcept
+{
+    this->~Text_File();
+    new (this) Text_File(std::move(other));
+    return *this;
 }
