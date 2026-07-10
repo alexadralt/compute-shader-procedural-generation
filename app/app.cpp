@@ -46,7 +46,7 @@ void App::process_events(bool& running)
                 if (!m_keyboard_state[event.key.scancode]) {
                     m_keys_pressed_this_frame[event.key.scancode] = true;
                 }
-                m_keyboard_state[event.key.scancode] = true; // if we used SDL_GetKeyboardState() this value would be true before entering this case block (which is not what we want)
+                m_keyboard_state[event.key.scancode] = true; // We don't use SDL_GetKeyboardState() here because this value would be true before entering this case block (which is not what we want)
             } break;
             case SDL_EVENT_KEY_UP:
             {
@@ -92,7 +92,9 @@ void App::render(float dt)
     };
     Vk_Check(vkBeginCommandBuffer(cmd.vk_command_buffer(), &cmd_begin_info));
 
-    std::array<VkImageMemoryBarrier2, 1> image_barriers{
+    // terrain generation pass
+    
+    std::array<VkImageMemoryBarrier2, 1> terrain_gen_image_barriers{
         VkImageMemoryBarrier2{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
@@ -111,7 +113,7 @@ void App::render(float dt)
             },
         },
     };
-    std::array<VkBufferMemoryBarrier2, 1> buffer_barriers{
+    std::array<VkBufferMemoryBarrier2, 1> terrain_gen_buffer_barriers{
         VkBufferMemoryBarrier2{
             .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -125,24 +127,85 @@ void App::render(float dt)
             .size = VK_WHOLE_SIZE,
         },
     };
-    cmd.pipeline_barrier(image_barriers, buffer_barriers);
+    cmd.pipeline_barrier(terrain_gen_image_barriers, terrain_gen_buffer_barriers);
 
-    vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Compute_Pipelines_Terrain_Gen].vk_pipeline());
+    vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Gen].vk_pipeline());
     
     vkCmdBindDescriptorSets(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
-                            m_compute_pipeline_layouts[Compute_Pipelines_Terrain_Gen].vk_pipeline_layout(),
+                            m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(),
                             0, 1, &m_terrain_gen_descriptor_set.vk_descriptor_set(), 0, nullptr);
 
     std::array<uint64_t, 2> push_constants = {
         static_cast<uint64_t>(m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address()),
         static_cast<uint64_t>(m_terrain_gen_shader_octave_weights[m_frame_index].vk_device_address()),
     };
-    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Compute_Pipelines_Terrain_Gen].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
+    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
                       static_cast<uint32_t>(sizeof(uint64_t) * push_constants.size()), push_constants.data());
 
     vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, 1);
 
-    std::array<VkImageMemoryBarrier2, 2> blit_image_barriers{
+    // terrain normals pass
+
+    std::array<VkImageMemoryBarrier2, 1> terrain_normals_image_barriers{
+        VkImageMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_terrain_normals_image.vk_image(),
+            .subresourceRange{
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            },
+        },
+    };
+    std::array<VkBufferMemoryBarrier2, 2> terrain_normals_buffer_barriers{
+        VkBufferMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = m_terrain_normals_buffer.vk_buffer(),
+            .offset = 0,
+            .size = VK_WHOLE_SIZE,
+        },
+        VkBufferMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = m_terrain_heght_map_buffer.vk_buffer(),
+            .offset = 0,
+            .size = VK_WHOLE_SIZE,
+        },
+    };
+    cmd.pipeline_barrier(terrain_normals_image_barriers, terrain_normals_buffer_barriers);
+
+    vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Normals].vk_pipeline());
+
+    vkCmdBindDescriptorSets(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
+        m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(),
+        0, 1, &m_terrain_normals_descriptor_set.vk_descriptor_set(), 0, nullptr);
+
+    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &Terrain_Size);
+
+    vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, 1);
+
+    // blit
+
+    std::array<VkImageMemoryBarrier2, 3> blit_image_barriers{
         VkImageMemoryBarrier2{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
@@ -176,26 +239,38 @@ void App::render(float dt)
                 .levelCount = 1,
                 .layerCount = 1
             },
-        }
+        },
+        VkImageMemoryBarrier2{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
+            .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = m_terrain_normals_image.vk_image(),
+            .subresourceRange{
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .levelCount = 1,
+                .layerCount = 1
+            },
+        },
     };
     cmd.pipeline_barrier(blit_image_barriers, std::span<VkBufferMemoryBarrier2>());
-
-    VkClearColorValue clear_color = { 0, 0, 0, 0 };
-    VkImageSubresourceRange clear_subresource_range{
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .levelCount = 1,
-        .layerCount = 1
-    };
-    vkCmdClearColorImage(cmd.vk_command_buffer(), m_rdr_swapchain_images[image_index].vk_image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color, 1, &clear_subresource_range);
 
     VkSurfaceCapabilitiesKHR surface_caps{};
     Check(m_rdr_surface.get_surface_caps_khr(surface_caps));
     auto& extent = surface_caps.currentExtent;
 
-    int32_t blit_size_x = static_cast<int32_t>(std::min(extent.width, Terrain_Size));
-    int32_t blit_size_y = static_cast<int32_t>(std::min(extent.height, Terrain_Size));
+    // blit terrain height map image
 
-    VkImageBlit blit{
+    int32_t terrain_gen_blit_size_x = static_cast<int32_t>(std::min(extent.width, Terrain_Size));
+    int32_t terrain_gen_blit_size_y = static_cast<int32_t>(std::min(extent.height, Terrain_Size));
+
+    VkImageBlit2 terrain_gen_blit_region{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
         .srcSubresource = VkImageSubresourceLayers{
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
             .mipLevel = 0,
@@ -204,7 +279,7 @@ void App::render(float dt)
         },
         .srcOffsets = {
             VkOffset3D{ 0, 0, 0 },
-            VkOffset3D{ blit_size_x, blit_size_y, 1 }
+            VkOffset3D{ terrain_gen_blit_size_x, terrain_gen_blit_size_y, 1 }
         },
         .dstSubresource = VkImageSubresourceLayers{
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -214,13 +289,62 @@ void App::render(float dt)
         },
         .dstOffsets = {
             VkOffset3D{ 0, 0, 0 },
-            VkOffset3D{ blit_size_x, blit_size_y, 1 }
+            VkOffset3D{ terrain_gen_blit_size_x, terrain_gen_blit_size_y, 1 }
         },
     };
-    vkCmdBlitImage(cmd.vk_command_buffer(),
-                   m_terrain_height_map_image.vk_image(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   m_rdr_swapchain_images[image_index].vk_image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                   1, &blit, VK_FILTER_NEAREST);
+    VkBlitImageInfo2 terrain_gen_blit_info{
+        .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+        .srcImage = m_terrain_height_map_image.vk_image(),
+        .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .dstImage = m_rdr_swapchain_images[image_index].vk_image(),
+        .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .regionCount = 1,
+        .pRegions = &terrain_gen_blit_region,
+        .filter = VK_FILTER_NEAREST,
+    };
+    vkCmdBlitImage2(cmd.vk_command_buffer(), &terrain_gen_blit_info);
+
+    // blit terrain normals image
+
+    int32_t terrain_normals_blit_size_x = static_cast<int32_t>(std::min(extent.width - terrain_gen_blit_size_x, Terrain_Size));
+    int32_t terrain_normals_blit_size_y = static_cast<int32_t>(std::min(extent.height, Terrain_Size));
+
+    VkImageBlit2 terrain_normals_blit_region{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
+        .srcSubresource = VkImageSubresourceLayers{
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .srcOffsets = {
+            VkOffset3D{ 0, 0, 0 },
+            VkOffset3D{ terrain_normals_blit_size_x, terrain_normals_blit_size_y, 1 }
+        },
+        .dstSubresource = VkImageSubresourceLayers{
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .dstOffsets = {
+            VkOffset3D{ terrain_gen_blit_size_x, 0, 0 },
+            VkOffset3D{ terrain_gen_blit_size_x + terrain_normals_blit_size_x, terrain_normals_blit_size_y, 1 }
+        },
+    };
+    VkBlitImageInfo2 terrain_normals_blit_info{
+        .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+        .srcImage = m_terrain_normals_image.vk_image(),
+        .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        .dstImage = m_rdr_swapchain_images[image_index].vk_image(),
+        .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .regionCount = 1,
+        .pRegions = &terrain_normals_blit_region,
+        .filter = VK_FILTER_NEAREST,
+    };
+    vkCmdBlitImage2(cmd.vk_command_buffer(), &terrain_normals_blit_info);
+
+    // present
 
     std::array<VkImageMemoryBarrier2, 1> blit_to_present_image_barriers{
         VkImageMemoryBarrier2{
@@ -501,52 +625,67 @@ bool App::init()
     if (!rdr::Shader_Compiler::create(shader_compiler)) {
         return false;
     }
-    if (!shader_compiler.compile_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute, m_terrain_gen_shader)) {
+    if (!shader_compiler.compile_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute, m_shaders[Shaders_Terrain_Gen])) {
+        return false;
+    }
+    if (!shader_compiler.compile_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_normals.hlsl", rdr::Shader_Type::Compute, m_shaders[Shaders_Terrain_Normals])) {
         return false;
     }
 
-    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_terrain_gen_shader, 0, 0, m_terraing_gen_shader_descriptor_set_layout)) {
+    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Gen], 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Gen])) {
+        return false;
+    }
+    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Normals], 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Normals])) {
         return false;
     }
 
     if (!rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size * sizeof(float), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, m_terrain_heght_map_buffer)) {
         return false;
     }
+    if (!rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size * sizeof(float[2]), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, m_terrain_normals_buffer)) {
+        return false;
+    }
 
     if (!rdr::Image::create(m_rdr_allocator, Terrain_Size, Terrain_Size, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0, m_terrain_height_map_image, VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)) {
+        return false;
+    }
+    if (!rdr::Image::create(m_rdr_allocator, Terrain_Size, Terrain_Size, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 0, m_terrain_normals_image, VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)) {
         return false;
     }
 
     if (!rdr::Image_View::create(m_rdr_device, m_terrain_height_map_image, 0, VK_FORMAT_R8G8B8A8_UNORM, m_terraing_height_map_image_view)) {
         return false;
     }
-
-    auto terrain_gen_shader_push_constants = m_terrain_gen_shader.get_push_constants();
-    if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_terraing_gen_shader_descriptor_set_layout, 1), terrain_gen_shader_push_constants, VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[0])) {
+    if (!rdr::Image_View::create(m_rdr_device, m_terrain_normals_image, 0, VK_FORMAT_R8G8B8A8_UNORM, m_terrain_normals_image_view)) {
         return false;
     }
 
-    if (!rdr::Pipeline::create_compute(m_rdr_device, std::span(&m_terrain_gen_shader, 1), m_compute_pipeline_layouts, m_compute_pipelines)) {
+    auto terrain_gen_shader_push_constants = m_shaders[Shaders_Terrain_Gen].get_push_constants();
+    if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_descriptor_set_layouts[Shaders_Terrain_Gen], 1), terrain_gen_shader_push_constants,
+                                      VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[Shaders_Terrain_Gen])) {
+        return false;
+    }
+    auto terrain_normals_shader_push_constants = m_shaders[Shaders_Terrain_Normals].get_push_constants();
+    if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_descriptor_set_layouts[Shaders_Terrain_Normals], 1), terrain_normals_shader_push_constants,
+                                      VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[Shaders_Terrain_Normals])) {
         return false;
     }
 
-    if (!rdr::Descriptor_Pool::create(m_rdr_device, std::span(&m_terraing_gen_shader_descriptor_set_layout, 1), 1, m_descriptor_pool)) {
+    if (!rdr::Pipeline::create_compute(m_rdr_device, m_shaders, m_compute_pipeline_layouts, m_compute_pipelines)) {
         return false;
-    }
-
-    if (!m_descriptor_pool.allocate_descriptor_sets(1, m_terraing_gen_shader_descriptor_set_layout, std::span(&m_terrain_gen_descriptor_set, 1))) {
-        return false;
-    }
-
-    for (auto& octave_weights : m_terrain_gen_shader_octave_weights) {
-        if (!rdr::Buffer::create(m_rdr_allocator, sizeof(float) * m_terrain_gen_octave_weights.size(),
-                                 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-                                 octave_weights)) {
-            return false;
-        }
     }
     
+    if (!rdr::Descriptor_Pool::create(m_rdr_device, m_descriptor_set_layouts, static_cast<uint32_t>(m_descriptor_set_layouts.size()), m_descriptor_pool)) { // allocating one descriptor set per shader
+        return false;
+    }
+
+    if (!m_descriptor_pool.allocate_descriptor_sets(1, m_descriptor_set_layouts[Shaders_Terrain_Gen], std::span(&m_terrain_gen_descriptor_set, 1))) {
+        return false;
+    }
+    if (!m_descriptor_pool.allocate_descriptor_sets(1, m_descriptor_set_layouts[Shaders_Terrain_Normals], std::span(&m_terrain_normals_descriptor_set, 1))) {
+        return false;
+    }
+
     VkDescriptorBufferInfo terrain_buffer_info{
         .buffer = m_terrain_heght_map_buffer.vk_buffer(),
         .offset = 0,
@@ -567,6 +706,31 @@ bool App::init()
                                  VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
                                  shader_buffer)) {
+            return false;
+        }
+    }
+
+    VkDescriptorBufferInfo terrain_normals_buffer_info{
+        .buffer = m_terrain_normals_buffer.vk_buffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE,
+    };
+    VkDescriptorImageInfo terrain_normals_image_info{
+        .imageView = m_terrain_normals_image_view.vk_image_view(),
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+    };
+    std::array<VkWriteDescriptorSet, 3> write_terrain_normals_descriptor_set = {
+        m_terrain_normals_descriptor_set.write_storage_buffer(0, std::span(&terrain_buffer_info, 1)),
+        m_terrain_normals_descriptor_set.write_storage_buffer(1, std::span(&terrain_normals_buffer_info, 1)),
+        m_terrain_normals_descriptor_set.write_storage_image(2, std::span(&terrain_normals_image_info, 1)),
+    };
+    rdr::Descriptor_Set::update_descriptor_sets(m_rdr_device, write_terrain_normals_descriptor_set, std::span<VkCopyDescriptorSet>());
+
+    for (auto& octave_weights : m_terrain_gen_shader_octave_weights) {
+        if (!rdr::Buffer::create(m_rdr_allocator, sizeof(float) * m_terrain_gen_octave_weights.size(),
+            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            octave_weights)) {
             return false;
         }
     }

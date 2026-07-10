@@ -1,4 +1,4 @@
-frequency      0.005
+frequency      0.001
 amplitude      1
 octave_weights \
 			   0.5  \

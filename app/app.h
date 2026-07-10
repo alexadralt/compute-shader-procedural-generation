@@ -39,10 +39,11 @@ class App {
         uint64_t seed = 0xFAFAFAFAFAFAFAFA;
     };
 
-    enum Compute_Pipelines : size_t {
-        Compute_Pipelines_Terrain_Gen = 0,
+    enum Shaders : size_t {
+        Shaders_Terrain_Gen = 0,
+        Shaders_Terrain_Normals,
         
-        Compute_Pipelines_Count
+        Shaders_Count
     };
 
     class Text_File {
@@ -71,15 +72,25 @@ class App {
     rdr::Swapchain m_rdr_swapchain;
     std::vector<rdr::Image> m_rdr_swapchain_images;
 
-    rdr::Shader m_terrain_gen_shader;
-    rdr::Descriptor_Set_Layout m_terraing_gen_shader_descriptor_set_layout;
     rdr::Buffer m_terrain_heght_map_buffer;
+    rdr::Buffer m_terrain_normals_buffer;
+    
     rdr::Image m_terrain_height_map_image;
+    rdr::Image m_terrain_normals_image;
+    
     rdr::Image_View m_terraing_height_map_image_view;
-    std::array<rdr::Pipeline_Layout, Compute_Pipelines_Count> m_compute_pipeline_layouts;
-    std::array<rdr::Pipeline, Compute_Pipelines_Count> m_compute_pipelines;
+    rdr::Image_View m_terrain_normals_image_view;
+
+    std::array<rdr::Shader, Shaders_Count> m_shaders;
+    
+    std::array<rdr::Descriptor_Set_Layout, Shaders_Count> m_descriptor_set_layouts; // set 0
     rdr::Descriptor_Pool m_descriptor_pool;
     rdr::Descriptor_Set m_terrain_gen_descriptor_set;
+    rdr::Descriptor_Set m_terrain_normals_descriptor_set;
+    
+    std::array<rdr::Pipeline_Layout, Shaders_Count> m_compute_pipeline_layouts;
+    std::array<rdr::Pipeline, Shaders_Count> m_compute_pipelines;
+    
     rdr::Command_Pool m_command_pool;
     std::array<rdr::Command_Buffer, Frames_In_Flight> m_command_buffers;
     std::array<rdr::Fence, Frames_In_Flight> m_next_frame_fences;
@@ -94,7 +105,7 @@ class App {
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_data_buffers;
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_octave_weights;
 
-    std::array<bool, SDL_SCANCODE_COUNT> m_keyboard_state;          // an array of keys that are being pressed this frame (we don't use SDL_GetKeyboardState() beacuse it would be inconvinient for our logic)
+    std::array<bool, SDL_SCANCODE_COUNT> m_keyboard_state;          // an array of keys that are being pressed this frame
     std::array<bool, SDL_SCANCODE_COUNT> m_keys_pressed_this_frame; // an array of keys that have received key down event this frame
 
     void quit();
