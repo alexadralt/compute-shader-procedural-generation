@@ -82,14 +82,17 @@ class App {
     rdr::Descriptor_Set m_terrain_gen_descriptor_set;
     rdr::Command_Pool m_command_pool;
     std::array<rdr::Command_Buffer, Frames_In_Flight> m_command_buffers;
-    std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_data_buffers;
     std::array<rdr::Fence, Frames_In_Flight> m_next_frame_fences;
     std::array<rdr::Semaphore, Frames_In_Flight> m_wait_image_acquired_semaphores;
     std::vector<rdr::Semaphore> m_wait_renderer_complete_semaphores;
 
     uint32_t m_frame_index;
-    Terrain_Gen_Shader_Data m_terrain_gen_shader_data;
     bool m_should_recreate_swapchain;
+    
+    Terrain_Gen_Shader_Data m_terrain_gen_shader_data;
+    std::vector<float> m_terrain_gen_octave_weights;
+    std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_data_buffers;
+    std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_octave_weights;
 
     std::array<bool, SDL_SCANCODE_COUNT> m_keyboard_state;          // an array of keys that are being pressed this frame (we don't use SDL_GetKeyboardState() beacuse it would be inconvinient for our logic)
     std::array<bool, SDL_SCANCODE_COUNT> m_keys_pressed_this_frame; // an array of keys that have received key down event this frame

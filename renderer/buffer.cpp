@@ -24,6 +24,7 @@ bool rdr::Buffer::create(const Allocator& allocator, Uint64 size, VkBufferUsageF
 
     Buffer buffer;
     buffer.m_allocator = &allocator;
+    buffer.m_buffer_size = size;
 #if LOG_RENDERER_OBJECT_NAMES
     static uint64_t name_index = 0;
     buffer.m_name = std::format("buffer #{}", name_index++);

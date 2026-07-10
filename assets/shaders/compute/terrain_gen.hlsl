@@ -118,8 +118,8 @@ struct Terrain_Generation_Settings
 
 struct Push_Constants
 {
-    vk::BufferPointer<Terrain_Generation_Settings>
-    terrain_gen_settings;
+    vk::BufferPointer<Terrain_Generation_Settings> terrain_gen_settings;
+    uint64_t octave_weights_buffer_offset;
 };
 
 [[vk::push_constant]]
@@ -139,9 +139,9 @@ void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float noise_value = 0;
     for (int octave = 1; octave <= octave_count; ++octave)
     {
-        noise_value += simplex_noise_2d((float2(dispatch_thread_id.xy) - float(terrain_size / 2)) * frequency * float(octave), seed);
+        float octave_weight = vk::RawBufferLoad<float>(push_constants.octave_weights_buffer_offset + (sizeof(float) * (octave - 1))); // maybe a bit hacky but I did not want to bother with descriptor sets
+        noise_value += simplex_noise_2d((float2(dispatch_thread_id.xy) - float(terrain_size / 2)) * frequency * float(octave), seed) * octave_weight;
     }
-    noise_value /= float(octave_count);
     height_map[dispatch_thread_id.x * terrain_size + dispatch_thread_id.y] = noise_value * amplitude;
     
     float scaled_noise_value = (noise_value + 1.0) / 2.0;

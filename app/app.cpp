@@ -75,6 +75,14 @@ void App::render(float dt)
 
     memcpy(m_terrain_gen_shader_data_buffers[m_frame_index].mapped_data(), &m_terrain_gen_shader_data, sizeof(Terrain_Gen_Shader_Data));
 
+    if (m_terrain_gen_shader_octave_weights[m_frame_index].buffer_size() != m_terrain_gen_octave_weights.size() * sizeof(float)) {
+        Check(rdr::Buffer::create(m_rdr_allocator, sizeof(float) * m_terrain_gen_octave_weights.size(),
+                                  VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                                  m_terrain_gen_shader_octave_weights[m_frame_index]));
+    }
+    memcpy(m_terrain_gen_shader_octave_weights[m_frame_index].mapped_data(), m_terrain_gen_octave_weights.data(), m_terrain_gen_octave_weights.size() * sizeof(float));
+
     auto& cmd = m_command_buffers[m_frame_index];
     Vk_Check(vkResetCommandBuffer(cmd.vk_command_buffer(), 0));
 
@@ -125,8 +133,12 @@ void App::render(float dt)
                             m_compute_pipeline_layouts[Compute_Pipelines_Terrain_Gen].vk_pipeline_layout(),
                             0, 1, &m_terrain_gen_descriptor_set.vk_descriptor_set(), 0, nullptr);
 
-    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Compute_Pipelines_Terrain_Gen].vk_pipeline_layout(),
-                       VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(VkDeviceAddress), &m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address());
+    std::array<uint64_t, 2> push_constants = {
+        static_cast<uint64_t>(m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address()),
+        static_cast<uint64_t>(m_terrain_gen_shader_octave_weights[m_frame_index].vk_device_address()),
+    };
+    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Compute_Pipelines_Terrain_Gen].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                      static_cast<uint32_t>(sizeof(uint64_t) * push_constants.size()), push_constants.data());
 
     vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, 1);
 
@@ -293,13 +305,16 @@ std::vector<std::string_view> App::lex_config_file(std::string_view text)
     for (auto [index, value] : std::views::enumerate(text)) {
         size_t token_start = 0;
         if (value == '\r' || value == '\n' || value == '\0') {
-            auto line = text.substr(line_start, index - line_start + 1);
+            auto line = text.substr(line_start, index - line_start + 1); // if we are in CRLF we will visit \n after \r and then line will be an empty string
             line_start = value == '\r' ? index + 2 : index + 1;
 
             for (auto [index, value] : std::views::enumerate(line)) {
-                if (value == ' ' || value == '\r' || value == '\n' || value == '\0') {
+                if (value == ' ' || value == '\t' || value == '\r' || value == '\n' || value == '\0') {
                     if (token_start < static_cast<size_t>(index)) {
                         tokens.push_back(line.substr(token_start, index - token_start));
+                    }
+                    if (value == '\r' || value == '\n') {
+                        tokens.push_back("\n"); // issue a new line token
                     }
 
                     token_start = index + 1;
@@ -319,8 +334,7 @@ bool parse_value(std::string_view value_name, size_t token_index, std::span<std:
             std::println("Found no value for {}", value_name);
             return false;
         }
-        auto next_token = tokens[token_index + 1];
-        if (!value_parser(next_token, out_value)) {
+        if (!value_parser(token_index + 1, tokens, out_value)) {
             std::println("Could not parse value for {}", value_name);
             return false;
         }
@@ -331,7 +345,8 @@ bool parse_value(std::string_view value_name, size_t token_index, std::span<std:
 
 template<typename T>
 auto value_parser() {
-    return [](std::string_view token, T& out_value) {
+    return [](size_t token_index, std::span<std::string_view> tokens, T& out_value) {
+        auto token = tokens[token_index];
         if constexpr (std::is_integral_v<T>) { // we have to branch here because the interface of std::from_chars() is different for floats and integers
             if (token.starts_with("0x") || token.starts_with("0X")) { // check if token is a hex value starting with 0x... (necessary because of how std::from_chars() works)
                 token = token.substr(2, token.size() - 2);
@@ -349,6 +364,60 @@ auto value_parser() {
             auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), out_value);
             return ec == std::errc() && ptr == token.data() + token.size();
         }
+    };
+}
+
+template<typename T>
+auto array_value_parser() {
+    return [](size_t token_index, std::span<std::string_view> tokens, std::vector<T>& out_value) {
+        auto vp = value_parser<T>();
+        bool compute_length = true;
+        size_t out_array_length = 0;
+
+        while (true) { // iterate over tokens twice to first measure array length to allocate memory and then fill the array
+            for (size_t i = token_index; i < tokens.size();) {
+                if (tokens[i].size() == 1 && *tokens[i].data() == '\\') {
+                    if (tokens[i + 1].size() == 1 && *tokens[i + 1].data() == '\n') {
+                        i += 2;
+                        continue;
+                    }
+                    else {
+                        std::println("expected \"\\n\" after \"\\\" token but found \"{}\"", tokens[i + 1]);
+                        return false;
+                    }
+                }
+
+                if (tokens[i].size() == 1 && *tokens[i].data() == '\n') {
+                    break;
+                }
+
+                T value;
+                if (!vp(i, tokens, value)) {
+                    std::println("Unexpected token: \"{}\"", tokens[i]);
+                    return false;
+                }
+
+                if (compute_length) {
+                    out_array_length += 1;
+                }
+                else {
+                    out_value.push_back(value);
+                }
+
+                i += 1;
+            }
+
+            if (compute_length) {
+                compute_length = false; // we are done measuring length and will start filling the array now
+                out_value.clear();
+                out_value.reserve(out_array_length);
+            }
+            else {
+                break; // we have filled the array
+            }
+        }
+
+        return true;
     };
 }
 
@@ -372,14 +441,16 @@ bool App::load_terrain_shader_data_from_file()
             return false;
         }
 
-        if (!parse_value("octave_count", i, tokens, value_parser<uint32_t>(), m_terrain_gen_shader_data.octave_count)) {
-            return false;
-        }
-
         if (!parse_value("seed", i, tokens, value_parser<uint64_t>(), m_terrain_gen_shader_data.seed)) {
             return false;
         }
+
+        if (!parse_value("octave_weights", i, tokens, array_value_parser<float>(), m_terrain_gen_octave_weights)) {
+            return false;
+        }
     }
+
+    m_terrain_gen_shader_data.octave_count = static_cast<uint32_t>(m_terrain_gen_octave_weights.size());
 
     return true;
 }
@@ -465,6 +536,15 @@ bool App::init()
 
     if (!m_descriptor_pool.allocate_descriptor_sets(1, m_terraing_gen_shader_descriptor_set_layout, std::span(&m_terrain_gen_descriptor_set, 1))) {
         return false;
+    }
+
+    for (auto& octave_weights : m_terrain_gen_shader_octave_weights) {
+        if (!rdr::Buffer::create(m_rdr_allocator, sizeof(float) * m_terrain_gen_octave_weights.size(),
+                                 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                                 octave_weights)) {
+            return false;
+        }
     }
     
     VkDescriptorBufferInfo terrain_buffer_info{

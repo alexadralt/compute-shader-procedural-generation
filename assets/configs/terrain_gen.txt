@@ -1,4 +1,8 @@
-frequency    0.005
-amplitude    1
-octave_count 3
-seed         0xFAFAFAFAFAFAFAFA
+frequency      0.005
+amplitude      1
+octave_weights \
+			   0.5  \
+			   0.25 \
+			   0.15 \
+			   0.01
+seed           0xFAFAFAFAFAFAFAFA
