@@ -57,6 +57,7 @@ bool rdr::Image::create(const Allocator& allocator, Uint32 width, Uint32 height,
 
     Image image;
     image.m_allocator = &allocator;
+    image.m_image_size = { width, height, 1 };
 #if LOG_RENDERER_OBJECT_NAMES
     static Uint64 vk_image_count = 0;
     image.m_image_name = std::format("vk image #{}", vk_image_count++);

@@ -8,12 +8,14 @@
 
 #include <utility>
 #include <string>
+#include <array>
 
 namespace rdr {
     class Image {
         const Allocator* m_allocator;
         VmaAllocation m_vma_allocation;
         VkImage m_vk_image;
+        std::array<uint32_t, 3> m_image_size;
 
 #if LOG_RENDERER_OBJECT_NAMES
         std::string m_image_name;
@@ -29,7 +31,8 @@ namespace rdr {
 
         Image() : m_allocator(nullptr),
                   m_vma_allocation(VK_NULL_HANDLE),
-                  m_vk_image(VK_NULL_HANDLE) {}
+                  m_vk_image(VK_NULL_HANDLE),
+                  m_image_size() {}
         
         // create non-owning image
         Image(VkImage vk_image) : m_allocator(nullptr),
@@ -40,7 +43,8 @@ namespace rdr {
 
         Image(Image&& other) noexcept : m_allocator(other.m_allocator),
                                         m_vma_allocation(other.m_vma_allocation),
-                                        m_vk_image(other.m_vk_image)
+                                        m_vk_image(other.m_vk_image),
+                                        m_image_size(other.m_image_size)
 #if LOG_RENDERER_OBJECT_NAMES
                                       , m_image_name(std::move(other.m_image_name))
 #endif
@@ -55,5 +59,6 @@ namespace rdr {
         }
 
         VkImage vk_image() const { return m_vk_image; }
+        const std::array<uint32_t, 3>& image_size() const { return m_image_size; }
     };
 }

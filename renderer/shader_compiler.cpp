@@ -113,7 +113,7 @@ bool rdr::Shader_Compiler::compile_from_source_file(const Device& device, std::s
         }
     }
 
-    std::array<const wchar_t*, 7> arguments = {
+    std::array<const wchar_t*, 5> arguments = {
         // Shader main entry point
         L"-E", L"main",
         // Shader target profile
@@ -121,7 +121,7 @@ bool rdr::Shader_Compiler::compile_from_source_file(const Device& device, std::s
         // Compile to SPIRV
         L"-spirv",
         // debug info
-        L"-Zi", L"",//L"-Od",
+        //L"-Zi", L"-Zsb", L"-O0",
     };
 
     DxcBuffer buffer{

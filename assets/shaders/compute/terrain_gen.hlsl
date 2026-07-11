@@ -1,8 +1,3 @@
-inline float smax(float x, float y, float lambda)
-{
-    return (x + y + sqrt((x - y) * (x - y) + lambda)) / 2;
-}
-
 #define Grad_Table_Size 16
 
 static const float2 grad_table[Grad_Table_Size] =
@@ -99,7 +94,7 @@ float simplex_noise_2d(float2 p, uint64_t seed)
     grad_dots.y = dot(grad_table[grad_idx.y], p_to_cell_1);
     grad_dots.z = dot(grad_table[grad_idx.z], p_to_cell_2);
     
-    return dot(weights, grad_dots) * 70; // [-1; 1]
+    return dot(weights, grad_dots) * 380; // [-1; 1]
 }
 
 RWStructuredBuffer<float> height_map : register(u0, space0);
@@ -146,5 +141,5 @@ void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
     
     float scaled_noise_value = (noise_value + 1.0) / 2.0;
     float4 final_color = float4(max(0.5 - scaled_noise_value, 0.0) * 2.0, 0, max(scaled_noise_value - 0.5, 0.0) * 2.0, 1);
-    height_map_image[uint2(dispatch_thread_id.x, dispatch_thread_id.y)] = final_color.bgra; // swizzle to match actual bgra layout
+    height_map_image[dispatch_thread_id.xy] = final_color.bgra; // swizzle to match actual bgra layout
 }

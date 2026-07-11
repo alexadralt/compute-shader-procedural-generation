@@ -20,6 +20,8 @@
 #include <renderer/queue.h>
 
 #include <SDL3/SDL.h>
+#include <glm/glm.hpp>
+#include <glm/ext/quaternion_float.hpp>
 
 #include <array>
 #include <vector>
@@ -28,7 +30,7 @@
 #include <span>
 
 class App {
-    static constexpr size_t Frames_In_Flight = 2;
+    static constexpr size_t Frames_In_Flight = 3;
     static constexpr uint32_t Terrain_Size = 1024;
     
     struct Terrain_Gen_Shader_Data {
@@ -39,9 +41,26 @@ class App {
         uint64_t seed = 0xFAFAFAFAFAFAFAFA;
     };
 
+    struct Raymarch_Camera_Info {
+        alignas(16) glm::vec3 position;
+        alignas(16) glm::mat3x4 world_from_camera; // 3x4 beacuse in std140 layout each float3 in a 3x3 matrix is padded to have 16-byte allignemt
+    };
+
+    struct Terrain_Raymarch_Shader_Data {
+        Raymarch_Camera_Info camera_info;
+        alignas(8) glm::uvec2 out_image_size;
+        uint32_t terrain_size;
+    };
+
+    struct Camera_Info {
+        glm::vec3 position = glm::vec3(512, -100, 512);
+        glm::vec2 camera_angles_xy;
+    };
+
     enum Shaders : size_t {
         Shaders_Terrain_Gen = 0,
         Shaders_Terrain_Normals,
+        Shaders_Terrain_Raymarch,
         
         Shaders_Count
     };
@@ -72,6 +91,9 @@ class App {
     rdr::Swapchain m_rdr_swapchain;
     std::vector<rdr::Image> m_rdr_swapchain_images;
 
+    rdr::Image m_output_image;
+    rdr::Image_View m_output_image_view;
+
     rdr::Buffer m_terrain_heght_map_buffer;
     rdr::Buffer m_terrain_normals_buffer;
     
@@ -87,6 +109,7 @@ class App {
     rdr::Descriptor_Pool m_descriptor_pool;
     rdr::Descriptor_Set m_terrain_gen_descriptor_set;
     rdr::Descriptor_Set m_terrain_normals_descriptor_set;
+    rdr::Descriptor_Set m_terrain_raymarch_descriptor_set;
     
     std::array<rdr::Pipeline_Layout, Shaders_Count> m_compute_pipeline_layouts;
     std::array<rdr::Pipeline, Shaders_Count> m_compute_pipelines;
@@ -97,16 +120,22 @@ class App {
     std::array<rdr::Semaphore, Frames_In_Flight> m_wait_image_acquired_semaphores;
     std::vector<rdr::Semaphore> m_wait_renderer_complete_semaphores;
 
-    uint32_t m_frame_index;
-    bool m_should_recreate_swapchain;
+    uint32_t m_frame_index = 0;
+    bool m_should_recreate_swapchain = false;
     
     Terrain_Gen_Shader_Data m_terrain_gen_shader_data;
+    Terrain_Raymarch_Shader_Data m_terrain_raymarch_info;
     std::vector<float> m_terrain_gen_octave_weights;
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_data_buffers;
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_octave_weights;
+    std::array<rdr::Buffer, Frames_In_Flight> m_terrain_raymarch_info_buffers;
+
+    Camera_Info m_camera_info;
 
     std::array<bool, SDL_SCANCODE_COUNT> m_keyboard_state;          // an array of keys that are being pressed this frame
     std::array<bool, SDL_SCANCODE_COUNT> m_keys_pressed_this_frame; // an array of keys that have received key down event this frame
+
+    glm::vec2 m_restore_mouse_pos = { 0, 0 };
 
     void quit();
 
@@ -119,13 +148,16 @@ class App {
 
     static std::vector<std::string_view> lex_config_file(std::string_view text);
     bool load_terrain_shader_data_from_file();
+
+    glm::mat4x4 camera_from_world() const;
+    glm::mat4x4 world_from_camera() const;
 public:
     App() : m_window(nullptr),
-            m_frame_index(0),
             m_terrain_gen_shader_data(),
-            m_should_recreate_swapchain(false),
+            m_terrain_raymarch_info(),
             m_keyboard_state(),
-            m_keys_pressed_this_frame() {};
+            m_keys_pressed_this_frame(),
+            m_camera_info() {};
     ~App() { quit(); };
 
     App(const App& other) = delete;
