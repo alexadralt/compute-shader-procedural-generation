@@ -99,9 +99,6 @@ float simplex_noise_2d(float2 p, uint64_t seed)
 
 RWStructuredBuffer<float> height_map : register(u0, space0);
 
-[[vk::image_format("rgba8")]]
-RWTexture2D<unorm float4> height_map_image : register(u1, space0);
-
 struct Terrain_Generation_Settings
 {
     uint terrain_size;
@@ -138,8 +135,4 @@ void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
         noise_value += simplex_noise_2d((float2(dispatch_thread_id.xy) - float(terrain_size / 2)) * frequency * float(octave), seed) * octave_weight;
     }
     height_map[dispatch_thread_id.x * terrain_size + dispatch_thread_id.y] = noise_value * amplitude;
-    
-    float scaled_noise_value = (noise_value + 1.0) / 2.0;
-    float4 final_color = float4(max(0.5 - scaled_noise_value, 0.0) * 2.0, 0, max(scaled_noise_value - 0.5, 0.0) * 2.0, 1);
-    height_map_image[dispatch_thread_id.xy] = final_color.bgra; // swizzle to match actual bgra layout
 }

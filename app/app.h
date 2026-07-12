@@ -97,12 +97,6 @@ class App {
     rdr::Buffer m_terrain_heght_map_buffer;
     rdr::Buffer m_terrain_normals_buffer;
     
-    rdr::Image m_terrain_height_map_image;
-    rdr::Image m_terrain_normals_image;
-    
-    rdr::Image_View m_terraing_height_map_image_view;
-    rdr::Image_View m_terrain_normals_image_view;
-
     std::array<rdr::Shader, Shaders_Count> m_shaders;
     
     std::array<rdr::Descriptor_Set_Layout, Shaders_Count> m_descriptor_set_layouts; // set 0
@@ -122,6 +116,7 @@ class App {
 
     uint32_t m_frame_index = 0;
     bool m_should_recreate_swapchain = false;
+    glm::ivec2 m_current_window_size = { 0, 0 };
     
     Terrain_Gen_Shader_Data m_terrain_gen_shader_data;
     Terrain_Raymarch_Shader_Data m_terrain_raymarch_info;
@@ -136,6 +131,7 @@ class App {
     std::array<bool, SDL_SCANCODE_COUNT> m_keys_pressed_this_frame; // an array of keys that have received key down event this frame
 
     glm::vec2 m_restore_mouse_pos = { 0, 0 };
+    bool m_is_fullsreen = false;
 
     void quit();
 
