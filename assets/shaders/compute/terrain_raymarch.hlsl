@@ -42,13 +42,7 @@ inline float smax(float x, float y, float lambda)
 inline float terrain_sdf(float3 current_pos, float3 norm_ray_direction, uint terrain_size)
 {
     float value = bilinear_height_map(current_pos.xz, terrain_size) - current_pos.y;
-    
-    if (abs(norm_ray_direction.y) < 0.8f)
-    {
-        return value * 0.9f;
-    }
-    
-    return value;
+    return value * 0.5f; // factor to avoid holes at steep slopes
 }
 
 inline float sphere_sdf(float3 current_pos)
@@ -56,7 +50,7 @@ inline float sphere_sdf(float3 current_pos)
     return length(current_pos - float3(512, -100, 490)) - 25.f;
 }
 
-#define Max_Steps 64
+#define Max_Steps 256
 #define Eps 0.001
 
 struct Raymarch_Result
@@ -76,11 +70,11 @@ Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction, uint t
         float distance = terrain_sdf(current_pos, norm_ray_direction, terrain_size);
         if (abs(distance) < Eps)
         {
-            /*float2 grid_pos = floor(current_pos.xz);
-            if (grid_pos.x < 0 || grid_pos.y < 0 || grid_pos.x >= terrain_size - Eps || grid_pos.y >= terrain_size - Eps)
+            float2 grid_pos = floor(current_pos.xz);
+            if (grid_pos.x < 0 || grid_pos.y < 0 || grid_pos.x >= float(terrain_size * 5) - Eps || grid_pos.y >= float(terrain_size * 5) - Eps)
             {
                 return result;
-            }*/
+            }
             
             result.position = current_pos;
             result.hit = true;
