@@ -76,8 +76,8 @@ Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction, uint t
         float distance = terrain_sdf(current_pos, norm_ray_direction, terrain_size);
         if (abs(distance) < Eps)
         {
-            float2 grid_pos = floor(current_pos.xz);
-            /*if (grid_pos.x < 0 || grid_pos.y < 0 || grid_pos.x >= terrain_size - Eps || grid_pos.y >= terrain_size - Eps)
+            /*float2 grid_pos = floor(current_pos.xz);
+            if (grid_pos.x < 0 || grid_pos.y < 0 || grid_pos.x >= terrain_size - Eps || grid_pos.y >= terrain_size - Eps)
             {
                 return result;
             }*/
@@ -104,27 +104,32 @@ float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction, uint t
         float2 grad = normalize(bilinear_gradient_map(result.position.xz, terrain_size));
         float3 normal = normalize(float3(grad.x, -1, grad.y));
         float diffuse = 1 - max(dot(sun_direction, normal), 0);
-        float3 color = lerp(float3(1, 1, 0.7), float3(0.4f, 0.4f, 0.4f), diffuse);
+        const float3 ambient_color = float3(0.1, 0.1, 0.1);
+        float3 color = lerp(float3(0.6, 0.6, 0.2), ambient_color, diffuse);
         
         // shadows
         Raymarch_Result shadow_result = raymarch(result.position + sun_direction * 10, sun_direction, terrain_size);
         if (shadow_result.hit)
         {
-            color = float3(0.4f, 0.4f, 0.4f);
+            color = ambient_color;
         }
+        
+        const float base_height = 50;
+        float3 base_color = 0.5 * lerp(float3(1, 0, 0), float3(0, 0, 1), smoothstep(-base_height, base_height, clamp(-result.position.y, -base_height, base_height)));
+        color += base_color;
         
         return float4(color, 1);
     }
     
     // sky
     float t = norm_ray_direction.y * 0.5f + 0.5f;
-    float3 sky_color = lerp(float3(0.7f, 0.7f, 1.f), float3(0.1f, 0.1f, 0.6f), t);
+    float3 sky_color = lerp(float3(0.6f, 0.6f, 0.9f), float3(0.1f, 0.1f, 0.2f), t);
     
     const float sun_size = 0.999f;
-    float s = (max(dot(norm_ray_direction, sun_direction), sun_size) - sun_size) * (1.f / (1.f - sun_size));
-    float3 sun_color = float3(1.f, 1.f, 0.1f);
+    float s = max(dot(norm_ray_direction, sun_direction), sun_size);
+    const float3 sun_color = float3(1.f, 1.f, 0.1f);
     
-    float3 final_color = lerp(sky_color, sun_color, s);
+    float3 final_color = lerp(sky_color, sun_color, smoothstep(sun_size, 1.f, s));
     return float4(final_color, 1);
 }
 
@@ -170,5 +175,6 @@ void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float3 ray_direction = float3(pixel_coords.x, pixel_coords.y, 1);
     float3 world_ray_direction = normalize(mul(ray_direction, camera_info.world_from_camera));
     
-    out_image[dispatch_thread_id.xy] = get_color_for_ray(camera_info.positon, world_ray_direction, raymarch_info.terrain_size).bgra; // swizzle to match actual bgra layout
+    float4 color = get_color_for_ray(camera_info.positon, world_ray_direction, raymarch_info.terrain_size).bgra; // swizzle to match actual bgra layout
+    out_image[dispatch_thread_id.xy] = float4(pow(color.rgb, 0.4545), 1.f); // gamma correction
 }
