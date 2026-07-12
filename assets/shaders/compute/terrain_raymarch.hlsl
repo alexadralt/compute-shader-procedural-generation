@@ -38,13 +38,17 @@ inline float smax(float x, float y, float lambda)
     return (x + y + sqrt((x - y) * (x - y) + lambda)) / 2;
 }
 
+
 inline float terrain_sdf(float3 current_pos, float3 norm_ray_direction, uint terrain_size)
 {
     float value = bilinear_height_map(current_pos.xz, terrain_size) - current_pos.y;
+    
+    if (abs(norm_ray_direction.y) < 0.8f)
+    {
+        return value * 0.9f;
+    }
+    
     return value;
-    /*float slope_factor = length(bilinear_gradient_map(current_pos.xz, terrain_size));
-    return value / sqrt(1.0 + slope_factor * slope_factor);*/
-    //return value * clamp(abs(norm_ray_direction.y), 0.1, 1.0) * 0.9;
 }
 
 inline float sphere_sdf(float3 current_pos)
@@ -55,21 +59,73 @@ inline float sphere_sdf(float3 current_pos)
 #define Max_Steps 64
 #define Eps 0.001
 
-float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction, uint terrain_size)
+struct Raymarch_Result
 {
+    float3 position;
+    bool   hit;
+};
+
+Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction, uint terrain_size)
+{
+    Raymarch_Result result;
+    result.hit = false;
+    
     float3 current_pos = ray_start_pos;
     for (int step = 0; step < Max_Steps; ++step)
     {
         float distance = terrain_sdf(current_pos, norm_ray_direction, terrain_size);
         if (abs(distance) < Eps)
         {
-            return float4(normalize(bilinear_gradient_map(current_pos.xz, terrain_size)) / 2.0 + 0.5, 1, 1);
+            float2 grid_pos = floor(current_pos.xz);
+            /*if (grid_pos.x < 0 || grid_pos.y < 0 || grid_pos.x >= terrain_size - Eps || grid_pos.y >= terrain_size - Eps)
+            {
+                return result;
+            }*/
+            
+            result.position = current_pos;
+            result.hit = true;
+            return result;
         }
         
         current_pos += distance * norm_ray_direction;
     }
     
-    return float4(0, 0, 0, 1);
+    return result;
+}
+
+float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction, uint terrain_size)
+{
+    const float3 sun_direction = normalize(float3(1, -0.3f, 1));
+    
+    Raymarch_Result result = raymarch(ray_start_pos, norm_ray_direction, terrain_size);
+    if (result.hit)
+    {
+        // diffuse lightning
+        float2 grad = normalize(bilinear_gradient_map(result.position.xz, terrain_size));
+        float3 normal = normalize(float3(grad.x, -1, grad.y));
+        float diffuse = 1 - max(dot(sun_direction, normal), 0);
+        float3 color = lerp(float3(1, 1, 0.7), float3(0.4f, 0.4f, 0.4f), diffuse);
+        
+        // shadows
+        Raymarch_Result shadow_result = raymarch(result.position + sun_direction * 10, sun_direction, terrain_size);
+        if (shadow_result.hit)
+        {
+            color = float3(0.4f, 0.4f, 0.4f);
+        }
+        
+        return float4(color, 1);
+    }
+    
+    // sky
+    float t = norm_ray_direction.y * 0.5f + 0.5f;
+    float3 sky_color = lerp(float3(0.7f, 0.7f, 1.f), float3(0.1f, 0.1f, 0.6f), t);
+    
+    const float sun_size = 0.999f;
+    float s = (max(dot(norm_ray_direction, sun_direction), sun_size) - sun_size) * (1.f / (1.f - sun_size));
+    float3 sun_color = float3(1.f, 1.f, 0.1f);
+    
+    float3 final_color = lerp(sky_color, sun_color, s);
+    return float4(final_color, 1);
 }
 
 [[vk::image_format("rgba8")]]

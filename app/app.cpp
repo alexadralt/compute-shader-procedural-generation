@@ -123,8 +123,8 @@ void App::update(float dt)
         glm::vec2 window_center = glm::vec2(window_dims) / 2.f;
         SDL_WarpMouseInWindow(m_window, window_center.x, window_center.y);
 
-        constexpr float Sensitivity = 0.7f;
-        mouse_delta *= dt * Sensitivity;
+        constexpr float Sensitivity = 0.005f;
+        mouse_delta *= Sensitivity;
 
         m_camera_info.camera_angles_xy.x = m_camera_info.camera_angles_xy.x - mouse_delta.x;
         m_camera_info.camera_angles_xy.y = glm::clamp(m_camera_info.camera_angles_xy.y + mouse_delta.y, -glm::half_pi<float>(), glm::half_pi<float>());
