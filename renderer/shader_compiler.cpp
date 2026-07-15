@@ -7,7 +7,7 @@
 #include <spirv_reflect.h>
 
 #include <print>
-#include <array>
+#include <vector>
 #include <filesystem>
 #include <format>
 #include <cassert>
@@ -42,11 +42,13 @@ rdr::Shader_Compiler::~Shader_Compiler()
     }
 }
 
-bool rdr::Shader_Compiler::create(Shader_Compiler& out_shader_compiler)
+bool rdr::Shader_Compiler::create(const Device& device, Shader_Compiler& out_shader_compiler)
 {
     std::println("creating shader compiler...");
     
     Shader_Compiler compiler;
+    compiler.m_device = &device;
+
     HRESULT result;
 
     result = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&compiler.m_dxc_library));
@@ -71,7 +73,7 @@ bool rdr::Shader_Compiler::create(Shader_Compiler& out_shader_compiler)
     return true;
 }
 
-bool rdr::Shader_Compiler::compile_from_source_file(const Device& device, std::string_view source_path, Shader_Type shader_type, Shader& out_shader)
+bool rdr::Shader_Compiler::compile_from_source_file(std::string_view source_path, Shader_Type shader_type, std::span<Shader_Define> defines, Shader& out_shader)
 {
     std::println("compiling shader {}...", source_path);
 
@@ -113,7 +115,7 @@ bool rdr::Shader_Compiler::compile_from_source_file(const Device& device, std::s
         }
     }
 
-    std::array<const wchar_t*, 5> arguments = {
+    std::vector<const wchar_t*> arguments = {
         // Shader main entry point
         L"-E", L"main",
         // Shader target profile
@@ -121,8 +123,19 @@ bool rdr::Shader_Compiler::compile_from_source_file(const Device& device, std::s
         // Compile to SPIRV
         L"-spirv",
         // debug info
-        //L"-Zi", L"-Zsb", L"-O0",
+        L"-Zi", L"-Zsb", //L"-O0",
     };
+
+    std::vector<std::wstring> defines_wide(defines.size());
+    for (size_t i = 0; i < defines.size(); ++i) {
+        defines_wide[i] = std::format(L"{}={}", convert_to_utf_16(defines[i].name), convert_to_utf_16(defines[i].value));
+    }
+    
+    arguments.reserve(arguments.size() + defines.size() * 2);
+    for (auto& define : defines_wide) {
+        arguments.push_back(L"-D");
+        arguments.push_back(define.c_str());
+    }
 
     DxcBuffer buffer{
         .Ptr = source_blob->GetBufferPointer(),
@@ -164,7 +177,7 @@ bool rdr::Shader_Compiler::compile_from_source_file(const Device& device, std::s
     };
 
     VkShaderModule shader_module;
-    VkResult vk_result = vkCreateShaderModule(device.vk_device(), &shader_module_CI, nullptr, &shader_module);
+    VkResult vk_result = vkCreateShaderModule(m_device->vk_device(), &shader_module_CI, nullptr, &shader_module);
     if (vk_result != VK_SUCCESS) {
         std::println("Could not create shader module: {}", static_cast<Sint32>(vk_result));
         return false;
@@ -178,7 +191,7 @@ bool rdr::Shader_Compiler::compile_from_source_file(const Device& device, std::s
     }
 
 #if LOG_RENDERER_OBJECT_NAMES
-    Shader shader(device, shader_module, std::move(spv_shader_module), std::string(source_path));
+    Shader shader(*m_device, shader_module, std::move(spv_shader_module), std::string(source_path));
 #else
     Shader shader(device, shader_module, std::move(spv_shader_module));
 #endif

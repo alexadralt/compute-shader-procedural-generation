@@ -30,14 +30,16 @@
 #include <span>
 
 class App {
-    static constexpr size_t Frames_In_Flight = 3;
+    static constexpr size_t   Frames_In_Flight = 3;
     static constexpr uint32_t Terrain_Size = 1024;
+    static constexpr size_t   Chunks_Count_X = 7;
     
     struct Terrain_Gen_Shader_Data {
         uint32_t terrain_size = Terrain_Size;
         float frequency = 0.0025f;
         float amplitude = 1;
         uint32_t octave_count = 1;
+        uint32_t chunk_count_x = Chunks_Count_X;
         uint64_t seed = 0xFAFAFAFAFAFAFAFA;
     };
 
@@ -50,10 +52,11 @@ class App {
         Raymarch_Camera_Info camera_info;
         alignas(8) glm::uvec2 out_image_size;
         uint32_t terrain_size;
+        uint32_t chunk_count_x;
     };
 
     struct Camera_Info {
-        glm::vec3 position = glm::vec3(512, -100, 512);
+        glm::vec3 position = glm::vec3(512, -250, 512);
         glm::vec2 camera_angles_xy;
     };
 
@@ -94,8 +97,8 @@ class App {
     rdr::Image m_output_image;
     rdr::Image_View m_output_image_view;
 
-    rdr::Buffer m_terrain_heght_map_buffer;
-    rdr::Buffer m_terrain_normals_buffer;
+    std::array<rdr::Buffer, Chunks_Count_X * Chunks_Count_X> m_terrain_heght_map_buffers;
+    std::array<rdr::Buffer, Chunks_Count_X * Chunks_Count_X> m_terrain_normals_buffers;
     
     std::array<rdr::Shader, Shaders_Count> m_shaders;
     

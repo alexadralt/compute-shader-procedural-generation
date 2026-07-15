@@ -197,9 +197,10 @@ bool rdr::Device::create(Device& out_device)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
         .descriptorIndexing = true,
         .shaderSampledImageArrayNonUniformIndexing = true,
+        .descriptorBindingPartiallyBound = true,
         .descriptorBindingVariableDescriptorCount = true,
         .runtimeDescriptorArray = true,
-        .bufferDeviceAddress = true
+        .bufferDeviceAddress = true,
     };
     VkPhysicalDeviceVulkan13Features enabled_vk_13_features{
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,

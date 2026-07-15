@@ -8,6 +8,7 @@
 
 #include <utility>
 #include <vector>
+#include <span>
 
 #if LOG_RENDERER_OBJECT_NAMES
 #include <string>
@@ -29,8 +30,8 @@ namespace rdr {
                                   m_vk_descriptor_set_layout(VK_NULL_HANDLE) {}
         ~Descriptor_Set_Layout();
 
-        static bool create_from_shader(const Device& device, const Shader& shader, Uint32 set_number, VkDescriptorSetLayoutCreateFlags flags, Descriptor_Set_Layout& out_descriptor_set_layout);
-        static bool create(const Device& device, std::vector<VkDescriptorSetLayoutBinding>&& layout_bindings, VkDescriptorSetLayoutCreateFlags flags, Descriptor_Set_Layout& out_descriptor_set_layout);
+        static bool create_from_shader(const Device& device, const Shader& shader, Uint32 set_number, VkDescriptorSetLayoutCreateFlags flags, uint32_t variable_descriptor_array_size, Descriptor_Set_Layout& out_descriptor_set_layout);
+        static bool create(const Device& device, std::vector<VkDescriptorSetLayoutBinding>&& layout_bindings, VkDescriptorSetLayoutCreateFlags flags, std::span<VkDescriptorBindingFlags> binding_flags, Descriptor_Set_Layout& out_descriptor_set_layout);
 
         Descriptor_Set_Layout(Descriptor_Set_Layout&& other) noexcept : m_device(other.m_device),
                                                                         m_vk_descriptor_set_layout(other.m_vk_descriptor_set_layout),

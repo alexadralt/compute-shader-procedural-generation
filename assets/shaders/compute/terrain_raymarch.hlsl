@@ -1,15 +1,55 @@
-RWStructuredBuffer<float>  height_map        : register(u0, space0);
-RWStructuredBuffer<float2> norm_gradient_map : register(u1, space0);
+StructuredBuffer<float>  height_map[MAX_DESCRIPTOR_ARRAY_SIZE]        : register(t0, space0);
+StructuredBuffer<float2> norm_gradient_map[MAX_DESCRIPTOR_ARRAY_SIZE] : register(t1, space0);
 
-float2 bilinear_gradient_map(float2 current_pos, uint terrain_size)
+[[vk::image_format("rgba8")]]
+RWTexture2D<unorm float4> out_image : register(u2, space0);
+
+struct Camera_Info
 {
-    float2 grid_coords = floor(current_pos);
-    uint2 uv = uint2(grid_coords) & (terrain_size - 1);
+    float3 positon;
+    float3x3 world_from_camera;
+};
+
+struct Raymarch_Info
+{
+    Camera_Info camera_info;
+    uint2 out_image_size;
+    uint terrain_size;
+    uint chunk_count_x;
+};
+
+struct Push_Constants
+{
+    vk::BufferPointer<Raymarch_Info> raymarch_info;
+};
+
+[[vk::push_constant]]
+Push_Constants push_constants;
+
+inline uint get_map_index(uint2 st)
+{
+    Raymarch_Info raymarch_info = push_constants.raymarch_info.Get();
+    uint terrain_size = raymarch_info.terrain_size;
+    uint render_distance = raymarch_info.chunk_count_x;
     
-    float2 hx0y0 = norm_gradient_map[  uv.x                            * terrain_size +   uv.y                           ];
-    float2 hx1y0 = norm_gradient_map[((uv.x + 1) & (terrain_size - 1)) * terrain_size +   uv.y                           ];
-    float2 hx0y1 = norm_gradient_map[  uv.x                            * terrain_size + ((uv.y + 1) & (terrain_size - 1))];
-    float2 hx1y1 = norm_gradient_map[((uv.x + 1) & (terrain_size - 1)) * terrain_size + ((uv.y + 1) & (terrain_size - 1))];
+    uint chunk_x = (st.x / terrain_size) % render_distance;
+    uint chunk_y = (st.y / terrain_size) % render_distance;
+    return chunk_x * render_distance + chunk_y;
+}
+
+template<typename T>
+T bilinear_map(StructuredBuffer<T> map[MAX_DESCRIPTOR_ARRAY_SIZE], float2 current_pos)
+{
+    Raymarch_Info raymarch_info = push_constants.raymarch_info.Get();
+    uint terrain_size = raymarch_info.terrain_size;
+    
+    float2 grid_coords = floor(current_pos);
+    uint2 st = uint2(grid_coords);
+    uint2 uv = st & (terrain_size - 1);
+    T hx0y0 = map[get_map_index(st              )][  uv.x                            * terrain_size +   uv.y                           ];
+    T hx1y0 = map[get_map_index(st + uint2(1, 0))][((uv.x + 1) & (terrain_size - 1)) * terrain_size +   uv.y                           ];
+    T hx0y1 = map[get_map_index(st + uint2(0, 1))][  uv.x                            * terrain_size + ((uv.y + 1) & (terrain_size - 1))];
+    T hx1y1 = map[get_map_index(st + uint2(1, 1))][((uv.x + 1) & (terrain_size - 1)) * terrain_size + ((uv.y + 1) & (terrain_size - 1))];
     
     float t = current_pos.x - grid_coords.x;
     float s = current_pos.y - grid_coords.y;
@@ -17,20 +57,14 @@ float2 bilinear_gradient_map(float2 current_pos, uint terrain_size)
     return hx0y0 * (1 - t) * (1 - s) + hx1y0 * t * (1 - s) + hx0y1 * (1 - t) * s + hx1y1 * t * s;
 }
 
-float bilinear_height_map(float2 current_pos, uint terrain_size)
+inline float2 bilinear_gradient_map(float2 current_pos)
 {
-    float2 grid_coords = floor(current_pos);
-    uint2 uv = uint2(grid_coords) & (terrain_size - 1);
-    
-    float hx0y0 = height_map[  uv.x                            * terrain_size +   uv.y                           ];
-    float hx1y0 = height_map[((uv.x + 1) & (terrain_size - 1)) * terrain_size +   uv.y                           ];
-    float hx0y1 = height_map[  uv.x                            * terrain_size + ((uv.y + 1) & (terrain_size - 1))];
-    float hx1y1 = height_map[((uv.x + 1) & (terrain_size - 1)) * terrain_size + ((uv.y + 1) & (terrain_size - 1))];
-    
-    float t = current_pos.x - grid_coords.x;
-    float s = current_pos.y - grid_coords.y;
-    
-    return hx0y0 * (1 - t) * (1 - s) + hx1y0 * t * (1 - s) + hx0y1 * (1 - t) * s + hx1y1 * t * s;
+    return bilinear_map(norm_gradient_map, current_pos);
+}
+
+inline float bilinear_height_map(float2 current_pos)
+{
+    return bilinear_map(height_map, current_pos);
 }
 
 inline float smax(float x, float y, float lambda)
@@ -38,10 +72,9 @@ inline float smax(float x, float y, float lambda)
     return (x + y + sqrt((x - y) * (x - y) + lambda)) / 2;
 }
 
-
-inline float terrain_sdf(float3 current_pos, float3 norm_ray_direction, uint terrain_size)
+inline float terrain_sdf(float3 current_pos, float3 norm_ray_direction)
 {
-    float value = bilinear_height_map(current_pos.xz, terrain_size) - current_pos.y;
+    float value = bilinear_height_map(current_pos.xz) - current_pos.y;
     return value * 0.5f; // factor to avoid holes at steep slopes
 }
 
@@ -59,25 +92,30 @@ struct Raymarch_Result
     bool   hit;
 };
 
-Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction, uint terrain_size)
+Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction)
 {
+    Raymarch_Info raymarch_info = push_constants.raymarch_info.Get();
+    uint terrain_size = raymarch_info.terrain_size;
+    uint chunk_count_x = raymarch_info.chunk_count_x;
+    
     Raymarch_Result result;
     result.hit = false;
     
     float3 current_pos = ray_start_pos;
     for (int step = 0; step < Max_Steps; ++step)
     {
-        float distance = terrain_sdf(current_pos, norm_ray_direction, terrain_size);
+        float distance = terrain_sdf(current_pos, norm_ray_direction);
         if (abs(distance) < Eps)
         {
-            float2 grid_pos = floor(current_pos.xz);
-            if (grid_pos.x < 0 || grid_pos.y < 0 || grid_pos.x >= float(terrain_size * 5) - Eps || grid_pos.y >= float(terrain_size * 5) - Eps)
-            {
-                return result;
-            }
-            
             result.position = current_pos;
             result.hit = true;
+            return result;
+        }
+        
+        // cull chunks outside the render distance
+        float2 grid_pos = floor(current_pos.xz);
+        if (grid_pos.x < 0 || grid_pos.y < 0 || grid_pos.x >= float(terrain_size * chunk_count_x) - Eps || grid_pos.y >= float(terrain_size * chunk_count_x) - Eps)
+        {
             return result;
         }
         
@@ -87,25 +125,37 @@ Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction, uint t
     return result;
 }
 
-float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction, uint terrain_size)
+float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
 {
     const float3 sun_direction = normalize(float3(1, -0.3f, 1));
     
-    Raymarch_Result result = raymarch(ray_start_pos, norm_ray_direction, terrain_size);
+    Raymarch_Result result = raymarch(ray_start_pos, norm_ray_direction);
     if (result.hit)
     {
         // diffuse lightning
-        float2 grad = normalize(bilinear_gradient_map(result.position.xz, terrain_size));
+        float2 grad = normalize(bilinear_gradient_map(result.position.xz));
         float3 normal = normalize(float3(grad.x, -1, grad.y));
         float diffuse = 1 - max(dot(sun_direction, normal), 0);
         const float3 ambient_color = float3(0.1, 0.1, 0.1);
         float3 color = lerp(float3(0.6, 0.6, 0.2), ambient_color, diffuse);
         
+        // specular highlight
+        float3 half_vector = normalize(sun_direction - norm_ray_direction);
+        float specular = max(dot(half_vector, normal), 0.f);
+        const float shininess = 20;
+        color += float3(1, 1, 0.2) * pow(specular, shininess);
+        
         // shadows
-        Raymarch_Result shadow_result = raymarch(result.position + sun_direction * 10, sun_direction, terrain_size);
-        if (shadow_result.hit)
+        float2 ray_total = result.position.xz - ray_start_pos.xz;
+        float ray_distance_sq = dot(ray_total, ray_total);
+        const float shadow_distance = 5000.f;
+        if (ray_distance_sq < shadow_distance * shadow_distance)
         {
-            color = ambient_color;
+            Raymarch_Result shadow_result = raymarch(result.position + sun_direction * 10, sun_direction);
+            if (shadow_result.hit)
+            {
+                color = ambient_color;
+            }
         }
         
         const float base_height = 50;
@@ -127,30 +177,6 @@ float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction, uint t
     return float4(final_color, 1);
 }
 
-[[vk::image_format("rgba8")]]
-RWTexture2D<unorm float4> out_image : register(u2, space0);
-
-struct Camera_Info
-{
-    float3 positon;
-    float3x3 world_from_camera;
-};
-
-struct Raymarch_Info
-{
-    Camera_Info camera_info;
-    uint2 out_image_size;
-    uint terrain_size;
-};
-
-struct Push_Constants
-{
-    vk::BufferPointer<Raymarch_Info> raymarch_info;
-};
-
-[[vk::push_constant]]
-Push_Constants push_constants;
-
 [numthreads(8, 8, 1)]
 void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
@@ -169,6 +195,6 @@ void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float3 ray_direction = float3(pixel_coords.x, pixel_coords.y, 1);
     float3 world_ray_direction = normalize(mul(ray_direction, camera_info.world_from_camera));
     
-    float4 color = get_color_for_ray(camera_info.positon, world_ray_direction, raymarch_info.terrain_size).bgra; // swizzle to match actual bgra layout
+    float4 color = get_color_for_ray(camera_info.positon, world_ray_direction).bgra; // swizzle to match actual bgra layout
     out_image[dispatch_thread_id.xy] = float4(pow(color.rgb, 0.4545), 1.f); // gamma correction
 }

@@ -87,7 +87,7 @@ void App::update(float dt)
     }
 
     glm::mat3x3 w_from_c = world_from_camera();
-    constexpr float move_speed = 2.3f;
+    float move_speed = 1000.f * dt;
 
     if (m_keyboard_state[SDL_SCANCODE_W]) {
         m_camera_info.position += w_from_c * glm::vec3(0, 0, 1) * move_speed;
@@ -158,6 +158,7 @@ void App::render(float dt)
         },
         .out_image_size = { m_output_image.image_size()[0], m_output_image.image_size()[1] },
         .terrain_size = Terrain_Size,
+        .chunk_count_x = Chunks_Count_X,
     };
     memcpy(m_terrain_raymarch_info_buffers[m_frame_index].mapped_data(), &raymarch_info, sizeof(Terrain_Raymarch_Shader_Data));
 
@@ -172,20 +173,19 @@ void App::render(float dt)
 
     // terrain generation pass
     
-    std::array<VkBufferMemoryBarrier2, 1> terrain_gen_buffer_barriers{
-        VkBufferMemoryBarrier2{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = m_terrain_heght_map_buffer.vk_buffer(),
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
-        },
-    };
+    std::array<VkBufferMemoryBarrier2, Chunks_Count_X * Chunks_Count_X> terrain_gen_buffer_barriers = {};
+    for (size_t i = 0; i < terrain_gen_buffer_barriers.size(); ++i) {
+        terrain_gen_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+        terrain_gen_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        terrain_gen_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_NONE;
+        terrain_gen_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        terrain_gen_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+        terrain_gen_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        terrain_gen_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        terrain_gen_buffer_barriers[i].buffer = m_terrain_heght_map_buffers[i].vk_buffer();
+        terrain_gen_buffer_barriers[i].offset = 0;
+        terrain_gen_buffer_barriers[i].size = VK_WHOLE_SIZE;
+    }
     cmd.pipeline_barrier(std::span<VkImageMemoryBarrier2>(), terrain_gen_buffer_barriers);
 
     vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Gen].vk_pipeline());
@@ -201,36 +201,35 @@ void App::render(float dt)
     vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
                       static_cast<uint32_t>(sizeof(uint64_t) * push_constants.size()), push_constants.data());
 
-    vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, 1);
+    vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, Chunks_Count_X * Chunks_Count_X);
 
     // terrain normals pass
 
-    std::array<VkBufferMemoryBarrier2, 2> terrain_normals_buffer_barriers{
-        VkBufferMemoryBarrier2{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = m_terrain_normals_buffer.vk_buffer(),
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
-        },
-        VkBufferMemoryBarrier2{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = m_terrain_heght_map_buffer.vk_buffer(),
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
-        },
-    };
+    std::array<VkBufferMemoryBarrier2, 2 * Chunks_Count_X * Chunks_Count_X> terrain_normals_buffer_barriers = {};
+    for (size_t i = 0; i < Chunks_Count_X * Chunks_Count_X; ++i) {
+        terrain_normals_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+        terrain_normals_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        terrain_normals_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_NONE;
+        terrain_normals_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        terrain_normals_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+        terrain_normals_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        terrain_normals_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        terrain_normals_buffer_barriers[i].buffer = m_terrain_normals_buffers[i].vk_buffer();
+        terrain_normals_buffer_barriers[i].offset = 0;
+        terrain_normals_buffer_barriers[i].size = VK_WHOLE_SIZE;
+    }
+    for (size_t i = Chunks_Count_X * Chunks_Count_X; i < 2 * Chunks_Count_X * Chunks_Count_X; ++i) {
+        terrain_normals_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+        terrain_normals_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        terrain_normals_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+        terrain_normals_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        terrain_normals_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+        terrain_normals_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        terrain_normals_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        terrain_normals_buffer_barriers[i].buffer = m_terrain_heght_map_buffers[i - Chunks_Count_X * Chunks_Count_X].vk_buffer();
+        terrain_normals_buffer_barriers[i].offset = 0;
+        terrain_normals_buffer_barriers[i].size = VK_WHOLE_SIZE;
+    }
     cmd.pipeline_barrier(std::span<VkImageMemoryBarrier2>(), terrain_normals_buffer_barriers);
 
     vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Normals].vk_pipeline());
@@ -241,7 +240,7 @@ void App::render(float dt)
 
     vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &Terrain_Size);
 
-    vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, 1);
+    vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, Chunks_Count_X * Chunks_Count_X);
 
     // render with raymarching
 
@@ -264,32 +263,31 @@ void App::render(float dt)
             },
         },
     };
-    std::array<VkBufferMemoryBarrier2, 2> raymarch_buffer_barriers{
-        VkBufferMemoryBarrier2{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = m_terrain_normals_buffer.vk_buffer(),
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
-        },
-        VkBufferMemoryBarrier2{
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = m_terrain_heght_map_buffer.vk_buffer(),
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
-        },
-    };
+    std::array<VkBufferMemoryBarrier2, 2 * Chunks_Count_X * Chunks_Count_X> raymarch_buffer_barriers = {};
+    for (size_t i = 0; i < Chunks_Count_X * Chunks_Count_X; ++i) {
+        raymarch_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+        raymarch_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        raymarch_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+        raymarch_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        raymarch_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+        raymarch_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        raymarch_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        raymarch_buffer_barriers[i].buffer = m_terrain_normals_buffers[i].vk_buffer();
+        raymarch_buffer_barriers[i].offset = 0;
+        raymarch_buffer_barriers[i].size = VK_WHOLE_SIZE;
+    }
+    for (size_t i = Chunks_Count_X * Chunks_Count_X; i < 2 * Chunks_Count_X * Chunks_Count_X; ++i) {
+        raymarch_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+        raymarch_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        raymarch_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+        raymarch_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        raymarch_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+        raymarch_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        raymarch_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        raymarch_buffer_barriers[i].buffer = m_terrain_heght_map_buffers[i - Chunks_Count_X * Chunks_Count_X].vk_buffer();
+        raymarch_buffer_barriers[i].offset = 0;
+        raymarch_buffer_barriers[i].size = VK_WHOLE_SIZE;
+    }
     cmd.pipeline_barrier(raymarch_image_barriers, raymarch_buffer_barriers);
 
     vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Raymarch].vk_pipeline());
@@ -680,37 +678,52 @@ bool App::init()
         return false;
     }
 
+    // creating terrain buffers
+    for (auto& buffer : m_terrain_heght_map_buffers) {
+        if (!rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size * sizeof(float), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, buffer)) {
+            return false;
+        }
+    }
+
+    for (auto& buffer : m_terrain_normals_buffers) {
+        if (!rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size * sizeof(float[2]), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, buffer)) {
+            return false;
+        }
+    }
+
+    // compile shaders
+    std::array<rdr::Shader_Define, 1> shader_defines = {
+        rdr::Shader_Define{
+            .name = "MAX_DESCRIPTOR_ARRAY_SIZE",
+            .value = "256",
+        },
+    };
     rdr::Shader_Compiler shader_compiler;
-    if (!rdr::Shader_Compiler::create(shader_compiler)) {
+    if (!rdr::Shader_Compiler::create(m_rdr_device, shader_compiler)) {
         return false;
     }
-    if (!shader_compiler.compile_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute, m_shaders[Shaders_Terrain_Gen])) {
+    if (!shader_compiler.compile_from_source_file("assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute, shader_defines, m_shaders[Shaders_Terrain_Gen])) {
         return false;
     }
-    if (!shader_compiler.compile_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_normals.hlsl", rdr::Shader_Type::Compute, m_shaders[Shaders_Terrain_Normals])) {
+    if (!shader_compiler.compile_from_source_file("assets/shaders/compute/terrain_normals.hlsl", rdr::Shader_Type::Compute, shader_defines, m_shaders[Shaders_Terrain_Normals])) {
         return false;
     }
-    if (!shader_compiler.compile_from_source_file(m_rdr_device, "assets/shaders/compute/terrain_raymarch.hlsl", rdr::Shader_Type::Compute, m_shaders[Shaders_Terrain_Raymarch])) {
-        return false;
-    }
-
-    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Gen], 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Gen])) {
-        return false;
-    }
-    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Normals], 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Normals])) {
-        return false;
-    }
-    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Raymarch], 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Raymarch])) {
+    if (!shader_compiler.compile_from_source_file("assets/shaders/compute/terrain_raymarch.hlsl", rdr::Shader_Type::Compute, shader_defines, m_shaders[Shaders_Terrain_Raymarch])) {
         return false;
     }
 
-    if (!rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size * sizeof(float), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, m_terrain_heght_map_buffer)) {
+    // create descriptor set layouts
+    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Gen], 0, 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Gen])) {
         return false;
     }
-    if (!rdr::Buffer::create(m_rdr_allocator, Terrain_Size * Terrain_Size * sizeof(float[2]), VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, m_terrain_normals_buffer)) {
+    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Normals], 0, 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Normals])) {
+        return false;
+    }
+    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Raymarch], 0, 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Raymarch])) {
         return false;
     }
 
+    // create pipeline layouts
     auto terrain_gen_shader_push_constants = m_shaders[Shaders_Terrain_Gen].get_push_constants();
     if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_descriptor_set_layouts[Shaders_Terrain_Gen], 1), terrain_gen_shader_push_constants,
                                       VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[Shaders_Terrain_Gen])) {
@@ -727,10 +740,12 @@ bool App::init()
         return false;
     }
 
+    // create compute pipelines
     if (!rdr::Pipeline::create_compute(m_rdr_device, m_shaders, m_compute_pipeline_layouts, m_compute_pipelines)) {
         return false;
     }
     
+    // create descriptor pool and allocate descriptors
     if (!rdr::Descriptor_Pool::create(m_rdr_device, m_descriptor_set_layouts, static_cast<uint32_t>(m_descriptor_set_layouts.size()), m_descriptor_pool)) { // allocating one descriptor set per shader
         return false;
     }
@@ -745,37 +760,33 @@ bool App::init()
         return false;
     }
 
-    VkDescriptorBufferInfo terrain_buffer_info{
-        .buffer = m_terrain_heght_map_buffer.vk_buffer(),
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-    std::array<VkWriteDescriptorSet, 1> write_descriptor_set = {
-        m_terrain_gen_descriptor_set.write_storage_buffer(0, std::span(&terrain_buffer_info, 1)),
-    };
-    rdr::Descriptor_Set::update_descriptor_sets(m_rdr_device, write_descriptor_set, std::span<VkCopyDescriptorSet>());
-
-    VkDescriptorBufferInfo terrain_normals_buffer_info{
-        .buffer = m_terrain_normals_buffer.vk_buffer(),
-        .offset = 0,
-        .range = VK_WHOLE_SIZE,
-    };
-    std::array<VkWriteDescriptorSet, 2> write_terrain_normals_descriptor_set = {
-        m_terrain_normals_descriptor_set.write_storage_buffer(0, std::span(&terrain_buffer_info, 1)),
-        m_terrain_normals_descriptor_set.write_storage_buffer(1, std::span(&terrain_normals_buffer_info, 1)),
-    };
-    rdr::Descriptor_Set::update_descriptor_sets(m_rdr_device, write_terrain_normals_descriptor_set, std::span<VkCopyDescriptorSet>());
-
+    // update descriptor sets
+    std::array<VkDescriptorBufferInfo, Chunks_Count_X * Chunks_Count_X> terrain_buffer_infos = {};
+    for (size_t i = 0; i < terrain_buffer_infos.size(); ++i) {
+        terrain_buffer_infos[i].buffer = m_terrain_heght_map_buffers[i].vk_buffer();
+        terrain_buffer_infos[i].range = VK_WHOLE_SIZE;
+    }
+    std::array<VkDescriptorBufferInfo, Chunks_Count_X * Chunks_Count_X> terrain_normals_buffer_infos = {};
+    for (size_t i = 0; i < terrain_normals_buffer_infos.size(); ++i) {
+        terrain_normals_buffer_infos[i].buffer = m_terrain_normals_buffers[i].vk_buffer();
+        terrain_normals_buffer_infos[i].range = VK_WHOLE_SIZE;
+    }
     VkDescriptorImageInfo output_image_info{
         .imageView = m_output_image_view.vk_image_view(),
         .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
     };
-    std::array<VkWriteDescriptorSet, 3> write_terrain_raymarch_descriptor_set = {
-        m_terrain_raymarch_descriptor_set.write_storage_buffer(0, std::span(&terrain_buffer_info, 1)),
-        m_terrain_raymarch_descriptor_set.write_storage_buffer(1, std::span(&terrain_normals_buffer_info, 1)),
-        m_terrain_raymarch_descriptor_set.write_storage_image (2, std::span(&output_image_info, 1)),
+
+    std::array<VkWriteDescriptorSet, 6> write_descriptor_set = {
+        m_terrain_gen_descriptor_set.write_storage_buffer(0, terrain_buffer_infos),
+        
+        m_terrain_normals_descriptor_set.write_storage_buffer(0, terrain_buffer_infos),
+        m_terrain_normals_descriptor_set.write_storage_buffer(1, terrain_normals_buffer_infos),
+        
+        m_terrain_raymarch_descriptor_set.write_storage_buffer(0, terrain_buffer_infos),
+        m_terrain_raymarch_descriptor_set.write_storage_buffer(1, terrain_normals_buffer_infos),
+        m_terrain_raymarch_descriptor_set.write_storage_image(2, std::span(&output_image_info, 1)),
     };
-    rdr::Descriptor_Set::update_descriptor_sets(m_rdr_device, write_terrain_raymarch_descriptor_set, std::span<VkCopyDescriptorSet>());
+    rdr::Descriptor_Set::update_descriptor_sets(m_rdr_device, write_descriptor_set, std::span<VkCopyDescriptorSet>());
 
     for (auto& shader_buffer : m_terrain_gen_shader_data_buffers) {
         if (!rdr::Buffer::create(m_rdr_allocator, sizeof(Terrain_Gen_Shader_Data),
