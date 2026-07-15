@@ -21,7 +21,6 @@
 
 #include <SDL3/SDL.h>
 #include <glm/glm.hpp>
-#include <glm/ext/quaternion_float.hpp>
 
 #include <array>
 #include <vector>
@@ -41,6 +40,11 @@ class App {
         uint32_t octave_count = 1;
         uint32_t chunk_count_x = Chunks_Count_X;
         uint64_t seed = 0xFAFAFAFAFAFAFAFA;
+    };
+
+    struct Terrain_Normals_Shader_Data {
+        uint32_t terrain_size;
+        uint32_t render_distance;
     };
 
     struct Raymarch_Camera_Info {

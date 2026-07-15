@@ -194,12 +194,12 @@ void App::render(float dt)
                             m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(),
                             0, 1, &m_terrain_gen_descriptor_set.vk_descriptor_set(), 0, nullptr);
 
-    std::array<uint64_t, 2> push_constants = {
-        static_cast<uint64_t>(m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address()),
-        static_cast<uint64_t>(m_terrain_gen_shader_octave_weights[m_frame_index].vk_device_address()),
+    std::array<VkDeviceAddress, 2> push_constants = {
+        m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address(),
+        m_terrain_gen_shader_octave_weights[m_frame_index].vk_device_address(),
     };
     vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                      static_cast<uint32_t>(sizeof(uint64_t) * push_constants.size()), push_constants.data());
+                      static_cast<uint32_t>(sizeof(VkDeviceAddress) * push_constants.size()), push_constants.data());
 
     vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, Chunks_Count_X * Chunks_Count_X);
 
@@ -235,10 +235,14 @@ void App::render(float dt)
     vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Normals].vk_pipeline());
 
     vkCmdBindDescriptorSets(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
-        m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(),
-        0, 1, &m_terrain_normals_descriptor_set.vk_descriptor_set(), 0, nullptr);
+                            m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(),
+                            0, 1, &m_terrain_normals_descriptor_set.vk_descriptor_set(), 0, nullptr);
 
-    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &Terrain_Size);
+    Terrain_Normals_Shader_Data terrain_normals_shader_data{
+        .terrain_size = Terrain_Size,
+        .render_distance = Chunks_Count_X,
+    };
+    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Terrain_Normals_Shader_Data), &terrain_normals_shader_data);
 
     vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, Chunks_Count_X * Chunks_Count_X);
 

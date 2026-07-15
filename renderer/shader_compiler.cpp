@@ -124,6 +124,9 @@ bool rdr::Shader_Compiler::compile_from_source_file(std::string_view source_path
         L"-spirv",
         // debug info
         L"-Zi", L"-Zsb", //L"-O0",
+        // global defines
+        L"-D", L"Pi=3.141592653589793",
+        L"-D", L"One_Over_Pi=0.318309886183790",
     };
 
     std::vector<std::wstring> defines_wide(defines.size());

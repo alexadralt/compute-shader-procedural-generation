@@ -128,22 +128,34 @@ Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction)
 float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
 {
     const float3 sun_direction = normalize(float3(1, -0.3f, 1));
+    const float3 sun_color = float3(1.f, 1.f, 0.1f);
     
     Raymarch_Result result = raymarch(ray_start_pos, norm_ray_direction);
     if (result.hit)
     {
-        // diffuse lightning
+        // base color
+        const float base_height = 50;
+        float3 base_color = 0.5 * lerp(float3(1, 0.4, 0.4), float3(0.4, 0.4, 1), smoothstep(-base_height, base_height, clamp(-result.position.y, -base_height, base_height)));
+        
+        // normals
         float2 grad = normalize(bilinear_gradient_map(result.position.xz));
         float3 normal = normalize(float3(grad.x, -1, grad.y));
-        float diffuse = 1 - max(dot(sun_direction, normal), 0);
-        const float3 ambient_color = float3(0.1, 0.1, 0.1);
-        float3 color = lerp(float3(0.6, 0.6, 0.2), ambient_color, diffuse);
+        
+        // diffuse lightning
+        const float3 ambient_color = float3(0.1, 0.1, 0.1) * Pi;
+        const float albedo = 1.f;
+        float3 diffuse_color = albedo * base_color * One_Over_Pi;
+        float diffuse = max(dot(sun_direction, normal), 0);
+        float3 diffuse_component = (ambient_color + sun_color * diffuse) * diffuse_color;
         
         // specular highlight
         float3 half_vector = normalize(sun_direction - norm_ray_direction);
-        float specular = max(dot(half_vector, normal), 0.f);
-        const float shininess = 20;
-        color += float3(1, 1, 0.2) * pow(specular, shininess);
+        float specular = max(dot(half_vector, normal), 0.f) * step(0, dot(sun_direction, normal));
+        const float shininess = 30;
+        const float specular_color = float3(1, 1, 1);
+        float3 specular_component = sun_color * specular_color * pow(specular, shininess);
+        
+        float3 color = diffuse_component + specular_component;
         
         // shadows
         float2 ray_total = result.position.xz - ray_start_pos.xz;
@@ -154,13 +166,9 @@ float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
             Raymarch_Result shadow_result = raymarch(result.position + sun_direction * 10, sun_direction);
             if (shadow_result.hit)
             {
-                color = ambient_color;
+                color = ambient_color * diffuse_color;
             }
         }
-        
-        const float base_height = 50;
-        float3 base_color = 0.5 * lerp(float3(1, 0, 0), float3(0, 0, 1), smoothstep(-base_height, base_height, clamp(-result.position.y, -base_height, base_height)));
-        color += base_color;
         
         return float4(color, 1);
     }
@@ -171,7 +179,6 @@ float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
     
     const float sun_size = 0.999f;
     float s = max(dot(norm_ray_direction, sun_direction), sun_size);
-    const float3 sun_color = float3(1.f, 1.f, 0.1f);
     
     float3 final_color = lerp(sky_color, sun_color, smoothstep(sun_size, 1.f, s));
     return float4(final_color, 1);
