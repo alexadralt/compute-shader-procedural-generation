@@ -96,7 +96,7 @@ void App::update(float dt)
     }
 
     glm::mat3x3 w_from_c = world_from_camera();
-    float move_speed = 1000.f * dt;
+    float move_speed = 5000.f * dt;
 
     if (m_keyboard_state[SDL_SCANCODE_W]) {
         m_camera_info.position += w_from_c * glm::vec3(0, 0, 1) * move_speed;
@@ -160,6 +160,14 @@ void App::render(float dt)
     }
     memcpy(m_terrain_gen_shader_octave_weights[m_frame_index].mapped_data(), m_terrain_gen_octave_weights.data(), m_terrain_gen_octave_weights.size() * sizeof(float));
 
+    if (m_terrain_gen_shader_octave_frequencies[m_frame_index].buffer_size() != m_terrain_gen_octave_frequencies.size() * sizeof(float)) {
+        Check(rdr::Buffer::create(m_rdr_allocator, sizeof(float) * m_terrain_gen_octave_frequencies.size(),
+                                  VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                                  m_terrain_gen_shader_octave_frequencies[m_frame_index]));
+    }
+    memcpy(m_terrain_gen_shader_octave_frequencies[m_frame_index].mapped_data(), m_terrain_gen_octave_frequencies.data(), m_terrain_gen_octave_frequencies.size() * sizeof(float));
+
     Terrain_Raymarch_Shader_Data raymarch_info{
         .camera_info = {
             .position = m_camera_info.position,
@@ -207,9 +215,10 @@ void App::render(float dt)
                                 m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(),
                                 0, 1, &m_terrain_gen_descriptor_set.vk_descriptor_set(), 0, nullptr);
 
-        std::array<VkDeviceAddress, 2> push_constants = {
+        std::array<VkDeviceAddress, 3> push_constants = {
             m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address(),
             m_terrain_gen_shader_octave_weights[m_frame_index].vk_device_address(),
+            m_terrain_gen_shader_octave_frequencies[m_frame_index].vk_device_address(),
         };
         vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
                            static_cast<uint32_t>(sizeof(VkDeviceAddress) * push_constants.size()), push_constants.data());
@@ -675,10 +684,6 @@ bool App::load_terrain_shader_data_from_file()
     auto tokens = lex_config_file(file.contents());
 
     for (size_t i = 0; i < tokens.size(); ++i) {
-        if (!parse_value("frequency", i, tokens, value_parser<float>(), m_terrain_gen_shader_data.frequency)) {
-            return false;
-        }
-
         if (!parse_value("amplitude", i, tokens, value_parser<float>(), m_terrain_gen_shader_data.amplitude)) {
             return false;
         }
@@ -690,8 +695,13 @@ bool App::load_terrain_shader_data_from_file()
         if (!parse_value("octave_weights", i, tokens, array_value_parser<float>(), m_terrain_gen_octave_weights)) {
             return false;
         }
+
+        if (!parse_value("octave_frequencies", i, tokens, array_value_parser<float>(), m_terrain_gen_octave_frequencies)) {
+            return false;
+        }
     }
 
+    m_terrain_gen_octave_weights.resize(m_terrain_gen_octave_frequencies.size()); // ensure these arrays have the same size
     m_terrain_gen_shader_data.octave_count = static_cast<uint32_t>(m_terrain_gen_octave_weights.size());
 
     return true;
@@ -839,6 +849,15 @@ bool App::init()
 
     for (auto& octave_weights : m_terrain_gen_shader_octave_weights) {
         if (!rdr::Buffer::create(m_rdr_allocator, sizeof(float) * m_terrain_gen_octave_weights.size(),
+                                 VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                                 octave_weights)) {
+            return false;
+        }
+    }
+
+    for (auto& octave_weights : m_terrain_gen_shader_octave_frequencies) {
+        if (!rdr::Buffer::create(m_rdr_allocator, sizeof(float) * m_terrain_gen_octave_frequencies.size(),
                                  VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                                  VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
                                  octave_weights)) {

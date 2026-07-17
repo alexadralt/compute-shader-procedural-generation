@@ -102,7 +102,6 @@ RWStructuredBuffer<float> height_map[MAX_DESCRIPTOR_ARRAY_SIZE] : register(u0, s
 struct Terrain_Generation_Settings
 {
     uint terrain_size;
-    float frequency;
     float amplitude;
     uint octave_count;
     uint render_distance;
@@ -113,6 +112,7 @@ struct Push_Constants
 {
     vk::BufferPointer<Terrain_Generation_Settings> terrain_gen_settings;
     uint64_t octave_weights_buffer_address;
+    uint64_t octave_frequencies_buffer_address;
 };
 
 [[vk::push_constant]]
@@ -124,7 +124,6 @@ void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
     Terrain_Generation_Settings terrain_generation_settings = push_constants.terrain_gen_settings.Get();
     
     uint terrain_size = terrain_generation_settings.terrain_size;
-    float frequency = terrain_generation_settings.frequency;
     float amplitude = terrain_generation_settings.amplitude;
     uint octave_count = terrain_generation_settings.octave_count;
     uint render_distance = terrain_generation_settings.render_distance;
@@ -133,12 +132,13 @@ void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float noise_value = 0;
     for (int octave = 1; octave <= octave_count; ++octave)
     {
-        float octave_weight = vk::RawBufferLoad<float>(push_constants.octave_weights_buffer_address + (sizeof(float) * (octave - 1))); // maybe a bit hacky but I did not want to bother with descriptor sets
+        float octave_weight =    vk::RawBufferLoad<float>(push_constants.octave_weights_buffer_address     + (sizeof(float) * (octave - 1))); // maybe a bit hacky but I did not want to bother with descriptor sets
+        float octave_frequency = vk::RawBufferLoad<float>(push_constants.octave_frequencies_buffer_address + (sizeof(float) * (octave - 1)));
         
         int2 position = int2(dispatch_thread_id.xy) - int(terrain_size) / 2;
         position += int2(dispatch_thread_id.z / render_distance, dispatch_thread_id.z % render_distance) * int(terrain_size); // adjust for chunk position
         
-        noise_value += simplex_noise_2d(float2(position) * frequency * float(octave), seed) * octave_weight;
+        noise_value += simplex_noise_2d(float2(position) * octave_frequency, seed) * octave_weight;
     }
     height_map[dispatch_thread_id.z][dispatch_thread_id.x * terrain_size + dispatch_thread_id.y] = noise_value * amplitude;
 }

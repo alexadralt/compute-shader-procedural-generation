@@ -31,11 +31,10 @@
 class App {
     static constexpr size_t   Frames_In_Flight = 3;
     static constexpr uint32_t Terrain_Size = 1024;
-    static constexpr size_t   Chunks_Count_X = 16;
+    static constexpr size_t   Chunks_Count_X = 24;
     
     struct Terrain_Gen_Shader_Data {
         uint32_t terrain_size = Terrain_Size;
-        float frequency = 0.0025f;
         float amplitude = 1;
         uint32_t octave_count = 1;
         uint32_t chunk_count_x = Chunks_Count_X;
@@ -134,8 +133,10 @@ class App {
     Terrain_Gen_Shader_Data m_terrain_gen_shader_data;
     Terrain_Raymarch_Shader_Data m_terrain_raymarch_info;
     std::vector<float> m_terrain_gen_octave_weights;
+    std::vector<float> m_terrain_gen_octave_frequencies;
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_data_buffers;
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_octave_weights;
+    std::array<rdr::Buffer, Frames_In_Flight> m_terrain_gen_shader_octave_frequencies;
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_raymarch_info_buffers;
 
     Camera_Info m_camera_info;
