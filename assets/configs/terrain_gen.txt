@@ -1,8 +1,20 @@
-frequency      0.0025
-amplitude      35
+frequency      0.00015
+amplitude      500
 octave_weights \
-			   0.5  \
-			   0.25 \
-			   0.15 \
-			   0.01
-seed           0xFAFAFAFAFAFAFAFA
+			   0.5   \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033 \
+			   0.033
+seed           0xBBFAFAFAFAFAFAFC

@@ -140,6 +140,8 @@ class App {
     glm::vec2 m_restore_mouse_pos = { 0, 0 };
     bool m_is_fullsreen = false;
 
+    bool m_should_regenerate_terrain = true;
+
     void quit();
 
     void process_events(bool& running);

@@ -139,7 +139,7 @@ float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
         
         // normals
         float2 grad = normalize(bilinear_gradient_map(result.position.xz));
-        float3 normal = normalize(float3(grad.x, -1, grad.y));
+        float3 normal = normalize(float3(grad.x, -1, grad.y)); // beacause y is down gradients end up facing in the direction of greatest descent, which is why normals end up being correct
         
         // diffuse lightning
         const float3 ambient_color = float3(0.1, 0.1, 0.1) * Pi;

@@ -79,6 +79,7 @@ void App::update(float dt)
 {
     if (m_keys_pressed_this_frame[SDL_SCANCODE_R]) {
         load_terrain_shader_data_from_file();
+        m_should_regenerate_terrain = true;
     }
 
     if (m_keys_pressed_this_frame[SDL_SCANCODE_F10]) {
@@ -171,80 +172,84 @@ void App::render(float dt)
     };
     Vk_Check(vkBeginCommandBuffer(cmd.vk_command_buffer(), &cmd_begin_info));
 
-    // terrain generation pass
+    if (m_should_regenerate_terrain) {
+        m_should_regenerate_terrain = false;
+
+        // terrain generation pass
     
-    std::array<VkBufferMemoryBarrier2, Chunks_Count_X * Chunks_Count_X> terrain_gen_buffer_barriers = {};
-    for (size_t i = 0; i < terrain_gen_buffer_barriers.size(); ++i) {
-        terrain_gen_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-        terrain_gen_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-        terrain_gen_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_NONE;
-        terrain_gen_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-        terrain_gen_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
-        terrain_gen_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        terrain_gen_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        terrain_gen_buffer_barriers[i].buffer = m_terrain_heght_map_buffers[i].vk_buffer();
-        terrain_gen_buffer_barriers[i].offset = 0;
-        terrain_gen_buffer_barriers[i].size = VK_WHOLE_SIZE;
-    }
-    cmd.pipeline_barrier(std::span<VkImageMemoryBarrier2>(), terrain_gen_buffer_barriers);
+        std::array<VkBufferMemoryBarrier2, Chunks_Count_X * Chunks_Count_X> terrain_gen_buffer_barriers = {};
+        for (size_t i = 0; i < terrain_gen_buffer_barriers.size(); ++i) {
+            terrain_gen_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+            terrain_gen_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            terrain_gen_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_NONE;
+            terrain_gen_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            terrain_gen_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+            terrain_gen_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            terrain_gen_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            terrain_gen_buffer_barriers[i].buffer = m_terrain_heght_map_buffers[i].vk_buffer();
+            terrain_gen_buffer_barriers[i].offset = 0;
+            terrain_gen_buffer_barriers[i].size = VK_WHOLE_SIZE;
+        }
+        cmd.pipeline_barrier(std::span<VkImageMemoryBarrier2>(), terrain_gen_buffer_barriers);
 
-    vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Gen].vk_pipeline());
+        vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Gen].vk_pipeline());
     
-    vkCmdBindDescriptorSets(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
-                            m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(),
-                            0, 1, &m_terrain_gen_descriptor_set.vk_descriptor_set(), 0, nullptr);
+        vkCmdBindDescriptorSets(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
+                                m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(),
+                                0, 1, &m_terrain_gen_descriptor_set.vk_descriptor_set(), 0, nullptr);
 
-    std::array<VkDeviceAddress, 2> push_constants = {
-        m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address(),
-        m_terrain_gen_shader_octave_weights[m_frame_index].vk_device_address(),
-    };
-    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                      static_cast<uint32_t>(sizeof(VkDeviceAddress) * push_constants.size()), push_constants.data());
+        std::array<VkDeviceAddress, 2> push_constants = {
+            m_terrain_gen_shader_data_buffers[m_frame_index].vk_device_address(),
+            m_terrain_gen_shader_octave_weights[m_frame_index].vk_device_address(),
+        };
+        vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                          static_cast<uint32_t>(sizeof(VkDeviceAddress) * push_constants.size()), push_constants.data());
 
-    vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, Chunks_Count_X * Chunks_Count_X);
+        vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, Chunks_Count_X * Chunks_Count_X);
 
-    // terrain normals pass
+        // terrain normals pass
 
-    std::array<VkBufferMemoryBarrier2, 2 * Chunks_Count_X * Chunks_Count_X> terrain_normals_buffer_barriers = {};
-    for (size_t i = 0; i < Chunks_Count_X * Chunks_Count_X; ++i) {
-        terrain_normals_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-        terrain_normals_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-        terrain_normals_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_NONE;
-        terrain_normals_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-        terrain_normals_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
-        terrain_normals_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        terrain_normals_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        terrain_normals_buffer_barriers[i].buffer = m_terrain_normals_buffers[i].vk_buffer();
-        terrain_normals_buffer_barriers[i].offset = 0;
-        terrain_normals_buffer_barriers[i].size = VK_WHOLE_SIZE;
+        std::array<VkBufferMemoryBarrier2, 2 * Chunks_Count_X * Chunks_Count_X> terrain_normals_buffer_barriers = {};
+        for (size_t i = 0; i < Chunks_Count_X * Chunks_Count_X; ++i) {
+            terrain_normals_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+            terrain_normals_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            terrain_normals_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_NONE;
+            terrain_normals_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            terrain_normals_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+            terrain_normals_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            terrain_normals_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            terrain_normals_buffer_barriers[i].buffer = m_terrain_normals_buffers[i].vk_buffer();
+            terrain_normals_buffer_barriers[i].offset = 0;
+            terrain_normals_buffer_barriers[i].size = VK_WHOLE_SIZE;
+        }
+        for (size_t i = Chunks_Count_X * Chunks_Count_X; i < 2 * Chunks_Count_X * Chunks_Count_X; ++i) {
+            terrain_normals_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+            terrain_normals_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            terrain_normals_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+            terrain_normals_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            terrain_normals_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+            terrain_normals_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            terrain_normals_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            terrain_normals_buffer_barriers[i].buffer = m_terrain_heght_map_buffers[i - Chunks_Count_X * Chunks_Count_X].vk_buffer();
+            terrain_normals_buffer_barriers[i].offset = 0;
+            terrain_normals_buffer_barriers[i].size = VK_WHOLE_SIZE;
+        }
+        cmd.pipeline_barrier(std::span<VkImageMemoryBarrier2>(), terrain_normals_buffer_barriers);
+
+        vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Normals].vk_pipeline());
+
+        vkCmdBindDescriptorSets(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
+                                m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(),
+                                0, 1, &m_terrain_normals_descriptor_set.vk_descriptor_set(), 0, nullptr);
+
+        Terrain_Normals_Shader_Data terrain_normals_shader_data{
+            .terrain_size = Terrain_Size,
+            .render_distance = Chunks_Count_X,
+        };
+        vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Terrain_Normals_Shader_Data), &terrain_normals_shader_data);
+
+        vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, Chunks_Count_X * Chunks_Count_X);
     }
-    for (size_t i = Chunks_Count_X * Chunks_Count_X; i < 2 * Chunks_Count_X * Chunks_Count_X; ++i) {
-        terrain_normals_buffer_barriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-        terrain_normals_buffer_barriers[i].srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-        terrain_normals_buffer_barriers[i].srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
-        terrain_normals_buffer_barriers[i].dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-        terrain_normals_buffer_barriers[i].dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
-        terrain_normals_buffer_barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        terrain_normals_buffer_barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        terrain_normals_buffer_barriers[i].buffer = m_terrain_heght_map_buffers[i - Chunks_Count_X * Chunks_Count_X].vk_buffer();
-        terrain_normals_buffer_barriers[i].offset = 0;
-        terrain_normals_buffer_barriers[i].size = VK_WHOLE_SIZE;
-    }
-    cmd.pipeline_barrier(std::span<VkImageMemoryBarrier2>(), terrain_normals_buffer_barriers);
-
-    vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Normals].vk_pipeline());
-
-    vkCmdBindDescriptorSets(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
-                            m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(),
-                            0, 1, &m_terrain_normals_descriptor_set.vk_descriptor_set(), 0, nullptr);
-
-    Terrain_Normals_Shader_Data terrain_normals_shader_data{
-        .terrain_size = Terrain_Size,
-        .render_distance = Chunks_Count_X,
-    };
-    vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Normals].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Terrain_Normals_Shader_Data), &terrain_normals_shader_data);
-
-    vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, Chunks_Count_X * Chunks_Count_X);
 
     // render with raymarching
 
