@@ -109,9 +109,11 @@ Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction)
     result.hit = false;
     
     float3 current_pos = ray_start_pos;
+    float3 prev_pos = ray_start_pos;
     for (int step = 0; step < Max_Steps; ++step)
     {
         float distance = terrain_sdf(current_pos, norm_ray_direction);
+        
         if (abs(distance) < Eps)
         {
             result.position = current_pos;
@@ -119,14 +121,46 @@ Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction)
             return result;
         }
         
+        if (distance < Eps)
+        {
+            // do a binary search to find intersection point
+            //
+            // since distance ended up being negative we know for sure that intersection exists
+            
+            float3 left = current_pos;
+            float3 right = prev_pos;
+            for (int step = 0; step <= Max_Steps; ++step)
+            {
+                float3 middle = (left + right) * 0.5;
+                float distance = terrain_sdf(middle, norm_ray_direction);
+                
+                if (abs(distance) < Eps || step == Max_Steps)
+                {
+                    result.position = middle;
+                    result.hit = true;
+                    return result;
+                }
+                
+                if (distance < -Eps)
+                {
+                    left = middle;
+                }
+                else
+                {
+                    right = middle;
+                }
+            }
+        }
+        
+        prev_pos = current_pos;
+        current_pos += distance * norm_ray_direction;
+        
         // cull chunks outside the render distance
         float2 grid_pos = floor(current_pos.xz);
         if (grid_pos.x < 0 || grid_pos.y < 0 || grid_pos.x >= float(terrain_size * chunk_count_x) - Eps || grid_pos.y >= float(terrain_size * chunk_count_x) - Eps)
         {
             return result;
         }
-        
-        current_pos += distance * norm_ray_direction;
     }
     
     return result;
@@ -167,7 +201,7 @@ float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
         // specular highlight
         float3 half_vector = normalize(sun_direction - norm_ray_direction);
         float specular = max(dot(half_vector, normal), 0.f) * step(0, dot(sun_direction, normal));
-        const float shininess = 30;
+        const float shininess = 70;
         const float specular_color = float3(1, 1, 1);
         float3 specular_component = sun_color * specular_color * pow(specular, shininess);
         
@@ -176,7 +210,7 @@ float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
         // shadows
         float2 ray_total = result.position.xz - ray_start_pos.xz;
         float ray_distance_sq = dot(ray_total, ray_total);
-        const float shadow_distance = 10000.f;
+        const float shadow_distance = 9000.f;
         if (ray_distance_sq < shadow_distance * shadow_distance)
         {
             Raymarch_Result shadow_result = raymarch(result.position + sun_direction * 10, sun_direction);
