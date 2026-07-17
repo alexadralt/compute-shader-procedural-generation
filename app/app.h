@@ -31,7 +31,7 @@
 class App {
     static constexpr size_t   Frames_In_Flight = 3;
     static constexpr uint32_t Terrain_Size = 1024;
-    static constexpr size_t   Chunks_Count_X = 24;
+    static constexpr size_t   Chunks_Count_X = 20;
     
     struct Terrain_Gen_Shader_Data {
         uint32_t terrain_size = Terrain_Size;

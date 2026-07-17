@@ -79,7 +79,7 @@ inline float smax(float x, float y, float lambda)
     return (x + y + sqrt((x - y) * (x - y) + lambda)) / 2;
 }
 
-inline float terrain_sdf(float3 current_pos, float3 norm_ray_direction)
+inline float terrain_sdf(float3 current_pos)
 {
     float value = bilinear_height_map(current_pos.xz) - current_pos.y;
     return value * 0.5f; // factor to avoid holes at steep slopes
@@ -112,7 +112,7 @@ Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction)
     float3 prev_pos = ray_start_pos;
     for (int step = 0; step < Max_Steps; ++step)
     {
-        float distance = terrain_sdf(current_pos, norm_ray_direction);
+        float distance = terrain_sdf(current_pos);
         
         if (abs(distance) < Eps)
         {
@@ -132,7 +132,7 @@ Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction)
             for (int step = 0; step <= Max_Steps; ++step)
             {
                 float3 middle = (left + right) * 0.5;
-                float distance = terrain_sdf(middle, norm_ray_direction);
+                float distance = terrain_sdf(middle);
                 
                 if (abs(distance) < Eps || step == Max_Steps)
                 {
@@ -166,72 +166,119 @@ Raymarch_Result raymarch(float3 ray_start_pos, float3 norm_ray_direction)
     return result;
 }
 
-float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
+static const float3 sun_direction = normalize(float3(1, -0.3f, 1));
+static const float3 sun_color = float3(1.f, 1.f, 0.1f);
+static const float3 ambient_color = float3(0.1, 0.1, 0.1) * Pi;
+static const float albedo = 1.f;
+
+inline float3 diffuse_specular(float3 norm_ray_direction, float3 base_color, float3 normal, float shininess)
 {
-    const float3 sun_direction = normalize(float3(1, -0.3f, 1));
-    const float3 sun_color = float3(1.f, 1.f, 0.1f);
+    // diffuse lightning
+    float3 diffuse_color = albedo * base_color * One_Over_Pi;
+    float diffuse = max(dot(sun_direction, normal), 0);
+    float3 diffuse_component = (ambient_color + sun_color * diffuse) * diffuse_color;
     
-    Raymarch_Result result = raymarch(ray_start_pos, norm_ray_direction);
-    if (result.hit)
+    // specular highlight
+    float3 half_vector = normalize(sun_direction - norm_ray_direction);
+    float specular = max(dot(half_vector, normal), 0.f) * step(0, dot(sun_direction, normal));
+    const float3 specular_color = float3(1, 1, 1);
+    float3 specular_component = sun_color * specular_color * pow(specular, shininess);
+    
+    return diffuse_component + specular_component;
+}
+
+inline float3 apply_shadow(float3 lit_color, float3 base_color, float3 ray_start_pos, float3 surface_position)
+{
+    float2 ray_total = surface_position.xz - ray_start_pos.xz;
+    float ray_distance_sq = dot(ray_total, ray_total);
+    const float shadow_distance = 20000.f;
+    if (ray_distance_sq < shadow_distance * shadow_distance)
     {
-        // base color
-        const float base_height = 50;
-        float3 base_color = 0.5 * lerp(float3(1, 0.4, 0.4), float3(0.4, 0.4, 1), smoothstep(-base_height, base_height, clamp(-result.position.y, -base_height, base_height)));
-        
-        // normals
-        float2 grad = bilinear_gradient_map(result.position.xz);
-        float3 normal = normalize(float3(grad.x, -1, grad.y)); // beacause y is down gradients end up facing in the direction of greatest descent, which is why normals end up being correct
-        
-        Raymarch_Info raymarch_info = push_constants.raymarch_info.Get();
-        if (raymarch_info.render_type == Render_Type_Normals)
+        Raymarch_Result shadow_result = raymarch(surface_position + sun_direction * 10, sun_direction);
+        if (shadow_result.hit)
         {
-            normal.y *= -1;
-            normal *= 0.5;
-            normal += 0.5;
-            return float4(normal, 1);
+            float3 diffuse_color = albedo * base_color * One_Over_Pi;
+            return ambient_color * diffuse_color;
         }
-        
-        // diffuse lightning
-        const float3 ambient_color = float3(0.1, 0.1, 0.1) * Pi;
-        const float albedo = 1.f;
-        float3 diffuse_color = albedo * base_color * One_Over_Pi;
-        float diffuse = max(dot(sun_direction, normal), 0);
-        float3 diffuse_component = (ambient_color + sun_color * diffuse) * diffuse_color;
-        
-        // specular highlight
-        float3 half_vector = normalize(sun_direction - norm_ray_direction);
-        float specular = max(dot(half_vector, normal), 0.f) * step(0, dot(sun_direction, normal));
-        const float shininess = 70;
-        const float specular_color = float3(1, 1, 1);
-        float3 specular_component = sun_color * specular_color * pow(specular, shininess);
-        
-        float3 color = diffuse_component + specular_component;
-        
-        // shadows
-        float2 ray_total = result.position.xz - ray_start_pos.xz;
-        float ray_distance_sq = dot(ray_total, ray_total);
-        const float shadow_distance = 9000.f;
-        if (ray_distance_sq < shadow_distance * shadow_distance)
-        {
-            Raymarch_Result shadow_result = raymarch(result.position + sun_direction * 10, sun_direction);
-            if (shadow_result.hit)
-            {
-                color = ambient_color * diffuse_color;
-            }
-        }
-        
-        return float4(color, 1);
     }
     
-    // sky
+    return lit_color;
+}
+
+float3 get_terrain_color(float3 position, float3 ray_start_pos, float3 norm_ray_direction)
+{
+    // base color
+    const float base_height = 500;
+    float3 base_color = 0.5 * lerp(float3(1, 1, 0.2), float3(0.7, 0.7, 0.7), smoothstep(-base_height, base_height, clamp(-position.y - 200, -base_height, base_height)));
+        
+    // normals
+    float2 grad = bilinear_gradient_map(position.xz);
+    float3 normal = normalize(float3(grad.x, -1, grad.y)); // beacause y is down gradients end up facing in the direction of greatest descent, which is why normals end up being correct
+        
+    Raymarch_Info raymarch_info = push_constants.raymarch_info.Get();
+    if (raymarch_info.render_type == Render_Type_Normals)
+    {
+        normal.y *= -1;
+        normal *= 0.5;
+        normal += 0.5;
+        return float4(normal, 1);
+    }
+        
+    const float shininess = 70;
+    float3 color = diffuse_specular(norm_ray_direction, base_color, normal, shininess);
+    color = apply_shadow(color, base_color, ray_start_pos, position);
+    
+    return color;
+}
+
+float3 get_sky_color(float3 norm_ray_direction)
+{
     float t = norm_ray_direction.y * 0.5f + 0.5f;
     float3 sky_color = lerp(float3(0.6f, 0.6f, 0.9f), float3(0.1f, 0.1f, 0.2f), t);
     
     const float sun_size = 0.999f;
     float s = max(dot(norm_ray_direction, sun_direction), sun_size);
     
-    float3 final_color = lerp(sky_color, sun_color, smoothstep(sun_size, 1.f, s));
-    return float4(final_color, 1);
+    return lerp(sky_color, sun_color, smoothstep(sun_size, 1.f, s));
+}
+
+float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
+{
+    Raymarch_Result result = raymarch(ray_start_pos, norm_ray_direction);
+    if (result.hit)
+    {
+        float3 color = get_terrain_color(result.position, ray_start_pos, norm_ray_direction);
+        
+        // water
+        if (result.position.y > 0) // y is down
+        {
+            float3 point_on_water_plane = float3(result.position.x, 0, result.position.z);
+            const float3 water_normal = float3(0, -1, 0);
+            
+            float ray_water_cosine = dot(norm_ray_direction, water_normal);
+            float t = dot(point_on_water_plane - ray_start_pos, water_normal) / ray_water_cosine; // ray is guaranteed to have intersection here
+            float3 water_position = ray_start_pos + t * norm_ray_direction;
+            
+            float3 reflection_direction = norm_ray_direction - 2 * ray_water_cosine * water_normal;
+            float reflection_factor = clamp(-ray_water_cosine, 0, 0.5);
+            
+            Raymarch_Result reflect_result = raymarch(water_position, reflection_direction);
+            float3 reflected_color = reflect_result.hit ? get_terrain_color(reflect_result.position, ray_start_pos, reflection_direction) : get_sky_color(reflection_direction);
+            
+            const float3 base_color = float3(0.1, 0.1, 1);
+            const float shininess = 5;
+            float3 water_color = diffuse_specular(norm_ray_direction, base_color, water_normal, shininess);
+            water_color = apply_shadow(water_color, base_color, ray_start_pos, water_position);
+            
+            water_color = lerp(water_color, reflected_color,  reflection_factor);
+            const float water_alpha = 0.2;
+            color = lerp(color, water_color, water_alpha);
+        }
+        
+        return float4(color, 1);
+    }
+    
+    return float4(get_sky_color(norm_ray_direction), 1);
 }
 
 [numthreads(8, 8, 1)]
