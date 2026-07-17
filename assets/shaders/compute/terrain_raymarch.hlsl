@@ -10,12 +10,19 @@ struct Camera_Info
     float3x3 world_from_camera;
 };
 
+enum Render_Type
+{
+    Render_Type_Regular,
+    Render_Type_Normals,
+};
+
 struct Raymarch_Info
 {
     Camera_Info camera_info;
     uint2 out_image_size;
     uint terrain_size;
     uint chunk_count_x;
+    Render_Type render_type;
 };
 
 struct Push_Constants
@@ -138,8 +145,17 @@ float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
         float3 base_color = 0.5 * lerp(float3(1, 0.4, 0.4), float3(0.4, 0.4, 1), smoothstep(-base_height, base_height, clamp(-result.position.y, -base_height, base_height)));
         
         // normals
-        float2 grad = normalize(bilinear_gradient_map(result.position.xz));
+        float2 grad = bilinear_gradient_map(result.position.xz);
         float3 normal = normalize(float3(grad.x, -1, grad.y)); // beacause y is down gradients end up facing in the direction of greatest descent, which is why normals end up being correct
+        
+        Raymarch_Info raymarch_info = push_constants.raymarch_info.Get();
+        if (raymarch_info.render_type == Render_Type_Normals)
+        {
+            normal.y *= -1;
+            normal *= 0.5;
+            normal += 0.5;
+            return float4(normal, 1);
+        }
         
         // diffuse lightning
         const float3 ambient_color = float3(0.1, 0.1, 0.1) * Pi;
@@ -160,7 +176,7 @@ float4 get_color_for_ray(float3 ray_start_pos, float3 norm_ray_direction)
         // shadows
         float2 ray_total = result.position.xz - ray_start_pos.xz;
         float ray_distance_sq = dot(ray_total, ray_total);
-        const float shadow_distance = 5000.f;
+        const float shadow_distance = 10000.f;
         if (ray_distance_sq < shadow_distance * shadow_distance)
         {
             Raymarch_Result shadow_result = raymarch(result.position + sun_direction * 10, sun_direction);

@@ -31,7 +31,7 @@
 class App {
     static constexpr size_t   Frames_In_Flight = 3;
     static constexpr uint32_t Terrain_Size = 1024;
-    static constexpr size_t   Chunks_Count_X = 7;
+    static constexpr size_t   Chunks_Count_X = 16;
     
     struct Terrain_Gen_Shader_Data {
         uint32_t terrain_size = Terrain_Size;
@@ -52,11 +52,17 @@ class App {
         alignas(16) glm::mat3x4 world_from_camera; // 3x4 beacuse in std140 layout each float3 in a 3x3 matrix is padded to have 16-byte allignemt
     };
 
+    enum class Raymarch_Render_Type {
+        Regular,
+        Normals,
+    };
+
     struct Terrain_Raymarch_Shader_Data {
         Raymarch_Camera_Info camera_info;
         alignas(8) glm::uvec2 out_image_size;
         uint32_t terrain_size;
         uint32_t chunk_count_x;
+        Raymarch_Render_Type render_type;
     };
 
     struct Camera_Info {
@@ -133,6 +139,7 @@ class App {
     std::array<rdr::Buffer, Frames_In_Flight> m_terrain_raymarch_info_buffers;
 
     Camera_Info m_camera_info;
+    Raymarch_Render_Type m_raymarch_render_type = Raymarch_Render_Type::Regular;
 
     std::array<bool, SDL_SCANCODE_COUNT> m_keyboard_state;          // an array of keys that are being pressed this frame
     std::array<bool, SDL_SCANCODE_COUNT> m_keys_pressed_this_frame; // an array of keys that have received key down event this frame
@@ -150,6 +157,7 @@ class App {
     
     void maybe_update_swapchain();
     void check_if_should_update_swapchain(VkResult result);
+    bool load_shaders(bool create_descriptor_set_layouts);
 
     static std::vector<std::string_view> lex_config_file(std::string_view text);
     bool load_terrain_shader_data_from_file();

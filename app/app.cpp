@@ -79,12 +79,20 @@ void App::update(float dt)
 {
     if (m_keys_pressed_this_frame[SDL_SCANCODE_R]) {
         load_terrain_shader_data_from_file();
+        Check(load_shaders(false));
         m_should_regenerate_terrain = true;
     }
 
     if (m_keys_pressed_this_frame[SDL_SCANCODE_F10]) {
         m_is_fullsreen = !m_is_fullsreen;
         Check(SDL_SetWindowFullscreen(m_window, m_is_fullsreen));
+    }
+
+    if (m_keys_pressed_this_frame[SDL_SCANCODE_1]) {
+        m_raymarch_render_type = Raymarch_Render_Type::Regular;
+    }
+    if (m_keys_pressed_this_frame[SDL_SCANCODE_2]) {
+        m_raymarch_render_type = Raymarch_Render_Type::Normals;
     }
 
     glm::mat3x3 w_from_c = world_from_camera();
@@ -160,6 +168,7 @@ void App::render(float dt)
         .out_image_size = { m_output_image.image_size()[0], m_output_image.image_size()[1] },
         .terrain_size = Terrain_Size,
         .chunk_count_x = Chunks_Count_X,
+        .render_type = m_raymarch_render_type,
     };
     memcpy(m_terrain_raymarch_info_buffers[m_frame_index].mapped_data(), &raymarch_info, sizeof(Terrain_Raymarch_Shader_Data));
 
@@ -203,7 +212,7 @@ void App::render(float dt)
             m_terrain_gen_shader_octave_weights[m_frame_index].vk_device_address(),
         };
         vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Gen].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                          static_cast<uint32_t>(sizeof(VkDeviceAddress) * push_constants.size()), push_constants.data());
+                           static_cast<uint32_t>(sizeof(VkDeviceAddress) * push_constants.size()), push_constants.data());
 
         vkCmdDispatch(cmd.vk_command_buffer(), Terrain_Size / 8, Terrain_Size / 8, Chunks_Count_X * Chunks_Count_X);
 
@@ -302,8 +311,8 @@ void App::render(float dt)
     vkCmdBindPipeline(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE, m_compute_pipelines[Shaders_Terrain_Raymarch].vk_pipeline());
 
     vkCmdBindDescriptorSets(cmd.vk_command_buffer(), VK_PIPELINE_BIND_POINT_COMPUTE,
-        m_compute_pipeline_layouts[Shaders_Terrain_Raymarch].vk_pipeline_layout(),
-        0, 1, &m_terrain_raymarch_descriptor_set.vk_descriptor_set(), 0, nullptr);
+                            m_compute_pipeline_layouts[Shaders_Terrain_Raymarch].vk_pipeline_layout(),
+                            0, 1, &m_terrain_raymarch_descriptor_set.vk_descriptor_set(), 0, nullptr);
 
     vkCmdPushConstants(cmd.vk_command_buffer(), m_compute_pipeline_layouts[Shaders_Terrain_Raymarch].vk_pipeline_layout(), VK_SHADER_STAGE_COMPUTE_BIT, 0,
                        sizeof(VkDeviceAddress), &m_terrain_raymarch_info_buffers[m_frame_index].vk_device_address());
@@ -464,6 +473,69 @@ void App::check_if_should_update_swapchain(VkResult result)
             assert(false);
         }
     }
+}
+
+bool App::load_shaders(bool create_descriptor_set_layouts)
+{
+    Vk_Check(vkDeviceWaitIdle(m_rdr_device.vk_device()));
+
+    // compile shaders
+    std::array<rdr::Shader_Define, 1> shader_defines = {
+        rdr::Shader_Define{
+            .name = "MAX_DESCRIPTOR_ARRAY_SIZE",
+            .value = "1024",
+        },
+    };
+    rdr::Shader_Compiler shader_compiler;
+    if (!rdr::Shader_Compiler::create(m_rdr_device, shader_compiler)) {
+        return false;
+    }
+    if (!shader_compiler.compile_from_source_file("assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute, shader_defines, m_shaders[Shaders_Terrain_Gen])) {
+        return false;
+    }
+    if (!shader_compiler.compile_from_source_file("assets/shaders/compute/terrain_normals.hlsl", rdr::Shader_Type::Compute, shader_defines, m_shaders[Shaders_Terrain_Normals])) {
+        return false;
+    }
+    if (!shader_compiler.compile_from_source_file("assets/shaders/compute/terrain_raymarch.hlsl", rdr::Shader_Type::Compute, shader_defines, m_shaders[Shaders_Terrain_Raymarch])) {
+        return false;
+    }
+
+    // create descriptor set layouts
+    if (create_descriptor_set_layouts) {
+        if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Gen], 0, 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Gen])) {
+            return false;
+        }
+        if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Normals], 0, 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Normals])) {
+            return false;
+        }
+        if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Raymarch], 0, 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Raymarch])) {
+            return false;
+        }
+    }
+
+    // create pipeline layouts
+    auto terrain_gen_shader_push_constants = m_shaders[Shaders_Terrain_Gen].get_push_constants();
+    if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_descriptor_set_layouts[Shaders_Terrain_Gen], 1), terrain_gen_shader_push_constants,
+        VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[Shaders_Terrain_Gen])) {
+        return false;
+    }
+    auto terrain_normals_shader_push_constants = m_shaders[Shaders_Terrain_Normals].get_push_constants();
+    if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_descriptor_set_layouts[Shaders_Terrain_Normals], 1), terrain_normals_shader_push_constants,
+        VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[Shaders_Terrain_Normals])) {
+        return false;
+    }
+    auto terrain_raymarch_shader_push_constants = m_shaders[Shaders_Terrain_Raymarch].get_push_constants();
+    if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_descriptor_set_layouts[Shaders_Terrain_Raymarch], 1), terrain_raymarch_shader_push_constants,
+        VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[Shaders_Terrain_Raymarch])) {
+        return false;
+    }
+
+    // create compute pipelines
+    if (!rdr::Pipeline::create_compute(m_rdr_device, m_shaders, m_compute_pipeline_layouts, m_compute_pipelines)) {
+        return false;
+    }
+
+    return true;
 }
 
 std::vector<std::string_view> App::lex_config_file(std::string_view text)
@@ -700,57 +772,7 @@ bool App::init()
         }
     }
 
-    // compile shaders
-    std::array<rdr::Shader_Define, 1> shader_defines = {
-        rdr::Shader_Define{
-            .name = "MAX_DESCRIPTOR_ARRAY_SIZE",
-            .value = "256",
-        },
-    };
-    rdr::Shader_Compiler shader_compiler;
-    if (!rdr::Shader_Compiler::create(m_rdr_device, shader_compiler)) {
-        return false;
-    }
-    if (!shader_compiler.compile_from_source_file("assets/shaders/compute/terrain_gen.hlsl", rdr::Shader_Type::Compute, shader_defines, m_shaders[Shaders_Terrain_Gen])) {
-        return false;
-    }
-    if (!shader_compiler.compile_from_source_file("assets/shaders/compute/terrain_normals.hlsl", rdr::Shader_Type::Compute, shader_defines, m_shaders[Shaders_Terrain_Normals])) {
-        return false;
-    }
-    if (!shader_compiler.compile_from_source_file("assets/shaders/compute/terrain_raymarch.hlsl", rdr::Shader_Type::Compute, shader_defines, m_shaders[Shaders_Terrain_Raymarch])) {
-        return false;
-    }
-
-    // create descriptor set layouts
-    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Gen], 0, 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Gen])) {
-        return false;
-    }
-    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Normals], 0, 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Normals])) {
-        return false;
-    }
-    if (!rdr::Descriptor_Set_Layout::create_from_shader(m_rdr_device, m_shaders[Shaders_Terrain_Raymarch], 0, 0, 0, m_descriptor_set_layouts[Shaders_Terrain_Raymarch])) {
-        return false;
-    }
-
-    // create pipeline layouts
-    auto terrain_gen_shader_push_constants = m_shaders[Shaders_Terrain_Gen].get_push_constants();
-    if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_descriptor_set_layouts[Shaders_Terrain_Gen], 1), terrain_gen_shader_push_constants,
-                                      VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[Shaders_Terrain_Gen])) {
-        return false;
-    }
-    auto terrain_normals_shader_push_constants = m_shaders[Shaders_Terrain_Normals].get_push_constants();
-    if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_descriptor_set_layouts[Shaders_Terrain_Normals], 1), terrain_normals_shader_push_constants,
-                                      VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[Shaders_Terrain_Normals])) {
-        return false;
-    }
-    auto terrain_raymarch_shader_push_constants = m_shaders[Shaders_Terrain_Raymarch].get_push_constants();
-    if (!rdr::Pipeline_Layout::create(m_rdr_device, std::span(&m_descriptor_set_layouts[Shaders_Terrain_Raymarch], 1), terrain_raymarch_shader_push_constants,
-                                      VK_SHADER_STAGE_COMPUTE_BIT, m_compute_pipeline_layouts[Shaders_Terrain_Raymarch])) {
-        return false;
-    }
-
-    // create compute pipelines
-    if (!rdr::Pipeline::create_compute(m_rdr_device, m_shaders, m_compute_pipeline_layouts, m_compute_pipelines)) {
+    if (!load_shaders(true)) {
         return false;
     }
     
